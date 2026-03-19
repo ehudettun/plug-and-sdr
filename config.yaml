@@ -1,0 +1,42 @@
+# plug-and-sdr configuration
+# Edit these settings for your station, then run: python3 server.py
+
+# ── Station location ──────────────────────────────────────────────────
+# Used to center maps. Set to your approximate lat/lon.
+site_lat: 0.0
+site_lon: 0.0
+site_name: "My SDR Station"
+
+# ── Paths ─────────────────────────────────────────────────────────────
+aircraft_json: "/usr/share/dump1090-mutability/html/data/aircraft.json"
+
+# ── SDR defaults ──────────────────────────────────────────────────────
+pager_freq: "152.5984"   # Default pager frequency (key into PAGER_FREQS)
+rtl_gain: 49             # Gain for VLF rtl_power scan
+
+# ── Dashboard ─────────────────────────────────────────────────────────
+dashboard_port: 8888
+
+# ── Pager organization patterns ───────────────────────────────────────
+# Add entries to tag CAP codes with organization names.
+# 'pattern' is a Python regex matched against lowercased message text.
+# These are examples — remove or replace with orgs in your area.
+pager_orgs:
+  - name: "Maine Medical Center Portland"
+    pattern: "mmcp|207-\\d{3}-\\d{4}|maine medical|portland.*me"
+  - name: "Brigham & Women's Hospital"
+    pattern: "617-732-|brigham|bwh|faulkner"
+  - name: "Mass General Hospital"
+    pattern: "617-726-|617-643-|massgeneral|mgh\\b"
+  - name: "Beth Israel Deaconess"
+    pattern: "617-667-|617-735-|bidmc|beth israel"
+  - name: "Tufts Medical Center"
+    pattern: "617-636-|tufts.*medical|nemc\\b"
+  - name: "Boston Medical Center"
+    pattern: "617-414-|bmc\\b|boston medical"
+  - name: "Lahey Health"
+    pattern: "lahey|beverly.*hospital|winchester.*hospital|nb medical|northeast.*health"
+  - name: "Newton-Wellesley Hospital"
+    pattern: "newton.*wellesley|nwh\\b"
+  - name: "Hospital IT/Admin"
+    pattern: "ritm\\d{7}|dep \\d{8}"

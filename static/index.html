@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SDR Dashboard</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0e1a; color: #e0e8ff; font-family: 'Courier New', monospace; height: 100vh; display: flex; flex-direction: column; }
+
+  header {
+    background: #0d1225;
+    border-bottom: 1px solid #1e3a5f;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 1.1rem; color: #4fc3f7; letter-spacing: 2px; text-transform: uppercase; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #4caf50; box-shadow: 0 0 6px #4caf50; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+  .tab-btn {
+    background: transparent;
+    border: 1px solid #1e3a5f;
+    color: #7090b0;
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.82rem;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+  }
+  .tab-btn:hover { border-color: #4fc3f7; color: #4fc3f7; }
+  .tab-btn.active { background: #1e3a5f; border-color: #4fc3f7; color: #4fc3f7; box-shadow: 0 0 10px rgba(79,195,247,0.2); }
+  .tab-btn .loading { display: none; }
+  .tab-btn.switching .loading { display: inline; }
+  .tab-btn.switching .label { display: none; }
+
+  .panel { display: none; flex: 1; overflow: hidden; min-height: 0; }
+  .panel.active { display: flex; flex-direction: column; }
+
+  /* ── Shared panel header ── */
+  .pager-header {
+    background: #0d1225;
+    border-bottom: 1px solid #1e3a5f;
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.75rem;
+    color: #4a6080;
+    flex-shrink: 0;
+  }
+  .pager-freq { color: #4fc3f7; }
+  .pager-count { margin-left: auto; }
+
+  /* ── Leaflet maps ── */
+  #planes-map, #ships-map { flex: 1; min-height: 0; }
+  .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(1.1); }
+  .leaflet-popup-content-wrapper {
+    background: #0d1225; border: 1px solid #2a4a6f;
+    color: #e0e8ff; border-radius: 4px; box-shadow: 0 2px 12px rgba(0,0,0,0.6);
+  }
+  .leaflet-popup-tip { background: #0d1225; }
+  .leaflet-popup-content { font-family: 'Courier New', monospace; font-size: 0.8rem; line-height: 1.6; }
+  .leaflet-popup-content b { color: #4fc3f7; }
+  .leaflet-container a.leaflet-popup-close-button { color: #4a6080; }
+
+  /* ── Pagers ── */
+  #pager-feed {
+    flex: 1; overflow-y: auto; padding: 12px;
+    display: flex; flex-direction: column-reverse;
+  }
+  #pager-feed::-webkit-scrollbar { width: 6px; }
+  #pager-feed::-webkit-scrollbar-track { background: #0a0e1a; }
+  #pager-feed::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
+
+  .pager-msg {
+    background: #0d1225; border: 1px solid #1a2840;
+    border-left: 3px solid #1e3a5f; border-radius: 4px;
+    padding: 8px 12px; margin-bottom: 6px;
+    animation: fadeIn 0.3s ease; font-size: 0.82rem; line-height: 1.5;
+  }
+  .pager-msg.readable { border-left-color: #4fc3f7; }
+  .pager-msg.alert    { border-left-color: #ff5252; background: #1a0d0d; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .msg-meta  { color: #4a6080; font-size: 0.72rem; margin-bottom: 3px; }
+  .msg-time  { color: #2a7090; }
+  .msg-id    { color: #4a6080; }
+  .msg-type  { color: #7a4fc3; }
+  .msg-body  { color: #c0d8f0; word-break: break-all; }
+  .msg-body.plain { color: #e8f4ff; }
+
+  .empty-state {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    color: #2a4060; font-size: 0.9rem; letter-spacing: 1px;
+  }
+
+  /* ── ACARS ── */
+  #acars-feed {
+    flex: 1; overflow-y: auto; padding: 12px;
+    display: flex; flex-direction: column-reverse;
+  }
+  #acars-feed::-webkit-scrollbar { width: 6px; }
+  #acars-feed::-webkit-scrollbar-track { background: #0a0e1a; }
+  #acars-feed::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
+
+  .acars-msg {
+    background: #0d1225; border: 1px solid #1a2840;
+    border-left: 3px solid #1e3a5f; border-radius: 4px;
+    padding: 8px 12px; margin-bottom: 6px;
+    animation: fadeIn 0.3s ease; font-size: 0.82rem; line-height: 1.5;
+  }
+  .acars-msg.flight      { border-left-color: #4caf50; }
+  .acars-msg.maintenance { border-left-color: #ffd740; }
+
+  /* ── Sensors ── */
+  #sensors-grid {
+    flex: 1; overflow-y: auto; padding: 16px;
+    display: flex; flex-wrap: wrap; gap: 12px; align-content: flex-start;
+  }
+  #sensors-grid::-webkit-scrollbar { width: 6px; }
+  #sensors-grid::-webkit-scrollbar-track { background: #0a0e1a; }
+  #sensors-grid::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
+
+  .sensor-card {
+    background: #0d1225; border: 1px solid #1e3a5f;
+    border-radius: 6px; padding: 14px; width: 220px;
+    min-height: 120px; transition: border-color 0.3s;
+  }
+  .sensor-card:hover { border-color: #2a5a8f; }
+  .sensor-card h3 { color: #4fc3f7; font-size: 0.85rem; margin-bottom: 6px; letter-spacing: 1px; }
+  .sensor-ts  { color: #2a4060; font-size: 0.7rem; margin-bottom: 8px; }
+  .sensor-row { color: #c0d8f0; font-size: 0.8rem; margin: 4px 0; }
+  .sensor-row .sk { color: #4a6080; }
+
+  /* ── Scanner ── */
+  #scanner-panel .pager-header { flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="status-dot" id="status-dot"></div>
+  <h1>📡 SDR Dashboard</h1>
+  <nav>
+    <button class="tab-btn active" data-mode="planes"  onclick="switchMode('planes',this)">
+      <span class="label">✈️ PLANES</span><span class="loading">⏳ TUNING...</span>
+    </button>
+    <button class="tab-btn" data-mode="pagers"  onclick="switchMode('pagers',this)">
+      <span class="label">📟 PAGERS</span><span class="loading">⏳ TUNING...</span>
+    </button>
+    <button class="tab-btn" data-mode="scanner" onclick="switchMode('scanner',this)">
+      <span class="label">🎙️ SCANNER</span><span class="loading">⏳ TUNING...</span>
+    </button>
+    <button class="tab-btn" data-mode="ais"     onclick="switchMode('ais',this)">
+      <span class="label">🚢 SHIPS</span><span class="loading">⏳ TUNING...</span>
+    </button>
+    <button class="tab-btn" data-mode="acars"   onclick="switchMode('acars',this)">
+      <span class="label">✈️ ACARS</span><span class="loading">⏳ TUNING...</span>
+    </button>
+    <button class="tab-btn" data-mode="sensors" onclick="switchMode('sensors',this)">
+      <span class="label">🌡️ SENSORS</span><span class="loading">⏳ TUNING...</span>
+    </button>
+    <button class="tab-btn" data-mode="aprs" onclick="switchMode('aprs',this)">
+      <span class="label">📍 APRS</span><span class="loading">⏳ TUNING...</span>
+    </button>
+    <button class="tab-btn" data-mode="vlf" onclick="switchMode('vlf',this)">
+      <span class="label">🌊 VLF</span><span class="loading">⏳ SCANNING...</span>
+    </button>
+  </nav>
+</header>
+
+<!-- ── Planes Panel ── -->
+<div class="panel active" id="planes-panel">
+  <div id="planes-map"></div>
+</div>
+
+<!-- ── Pagers Panel ── -->
+<div class="panel" id="pagers-panel">
+  <div class="pager-header">
+    <span>FLEX/POCSAG DECODER</span>
+    <select id="pager-freq-sel" onchange="switchPagerFreq(this.value)"
+      style="background:#0d1a2a;color:#4fc3f7;border:1px solid #1e3a5f;border-radius:4px;padding:2px 6px;font-size:0.8em;cursor:pointer">
+      <option value="152.5984">152.5984 MHz — FLEX Paging (VHF)</option>
+      <option value="929.5875">929.5875 MHz — Spok UHF</option>
+      <option value="931.8625">931.8625 MHz — Metrocall UHF</option>
+    </select>
+    <span id="msg-count" class="pager-count">0 messages</span>
+  </div>
+  <div id="pager-feed">
+    <div class="empty-state" id="empty-state">Waiting for signal...</div>
+  </div>
+</div>
+
+<!-- ── Scanner Panel ── -->
+<div class="panel" id="scanner-panel">
+  <div class="pager-header">
+    <span>VHF/UHF SCANNER</span>
+    <span class="pager-freq" id="scanner-freq-display">—</span>
+    <span id="scanner-status" style="margin-left:auto; color:#4caf50;">▶ LIVE</span>
+  </div>
+  <div style="display:flex; flex:1; overflow:hidden; min-height:0;">
+    <div style="width:260px; border-right:1px solid #1e3a5f; overflow-y:auto; padding:10px; flex-shrink:0;">
+      <div style="font-size:0.7rem; color:#4a6080; letter-spacing:1px; margin-bottom:10px;">FREQUENCIES</div>
+      <div id="freq-list"></div>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px;">
+      <div style="text-align:center; color:#4a6080; font-size:0.85rem;">
+        <div style="font-size:2rem; margin-bottom:10px;">🎙️</div>
+        <div id="now-playing" style="color:#4fc3f7; font-size:1rem; margin-bottom:6px;">Select a frequency</div>
+        <div id="now-playing-desc" style="color:#4a6080; font-size:0.8rem;"></div>
+      </div>
+      <audio id="scanner-audio" controls style="width:320px; filter:invert(0.8) hue-rotate(180deg);"></audio>
+      <div id="scanner-hint" style="font-size:0.8rem; color:#4fc3f7; text-align:center; padding:6px 12px;
+           background:#0d1a2a; border-radius:6px; border:1px solid #1e3a5f; display:none;">
+        ▶ Tap play above to start audio
+      </div>
+      <div style="font-size:0.72rem; color:#2a4060; text-align:center;">
+        Live audio from RTL-SDR · May be quiet between transmissions
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ships (AIS) Panel ── -->
+<div class="panel" id="ais-panel">
+  <div class="pager-header">
+    <span>AIS RECEIVER</span>
+    <span class="pager-freq">VHF 161/162 MHz</span>
+    <span id="ship-count" class="pager-count">0 vessels</span>
+  </div>
+  <div id="ships-map"></div>
+</div>
+
+<!-- ── ACARS Panel ── -->
+<div class="panel" id="acars-panel">
+  <div class="pager-header">
+    <span>ACARS DECODER</span>
+    <span class="pager-freq">129.125 / 130.025 / 131.550 MHz</span>
+    <span id="acars-count" class="pager-count">0 messages</span>
+  </div>
+  <div id="acars-feed">
+    <div class="empty-state" id="acars-empty">Waiting for ACARS signal...</div>
+  </div>
+</div>
+
+<!-- ── Sensors Panel ── -->
+<div class="panel" id="sensors-panel">
+  <div class="pager-header">
+    <span>RTL_433 SENSORS</span>
+    <span class="pager-freq">433.920 MHz</span>
+    <span id="sensor-count" class="pager-count">0 devices</span>
+  </div>
+  <div id="sensors-grid">
+    <div class="empty-state" id="sensors-empty" style="width:100%;">No sensors detected yet</div>
+  </div>
+</div>
+
+<!-- ── APRS Panel ── -->
+<div class="panel" id="aprs-panel">
+  <div class="pager-header">
+    <span>APRS — 144.390 MHz</span>
+    <span class="pager-freq" id="aprs-freq-label">Amateur Radio Packet</span>
+    <span id="aprs-count" class="pager-count">0 stations</span>
+  </div>
+  <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+    <div style="width:280px;border-right:1px solid #1e3a5f;overflow-y:auto;padding:10px;flex-shrink:0;">
+      <div style="font-size:0.7rem;color:#4a6080;letter-spacing:1px;margin-bottom:8px;">HEARD STATIONS</div>
+      <div id="aprs-list"></div>
+    </div>
+    <div style="flex:1;position:relative;">
+      <div id="aprs-map" style="width:100%;height:100%;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── VLF Panel ── -->
+<div class="panel" id="vlf-panel">
+  <div class="pager-header">
+    <span>🌊 VLF SPECTRUM — 10–100 kHz</span>
+    <span class="pager-freq" id="vlf-ts">Scanning...</span>
+    <span id="vlf-status" class="pager-count">⏳</span>
+  </div>
+  <div style="display:flex;flex:1;overflow:hidden;min-height:0;flex-direction:column;padding:12px;gap:12px;">
+    <canvas id="vlf-canvas" style="width:100%;height:220px;background:#050d1a;border-radius:6px;border:1px solid #1e3a5f;"></canvas>
+    <div id="vlf-stations" style="display:flex;flex-wrap:wrap;gap:8px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Site config (loaded from /api/config on startup) ──
+let siteConfig = { lat: 0, lon: 0, name: 'SDR Station' };
+
+// ── State ──
+const FREQUENCIES = [
+  // ── Local GA (AM) ──
+  { freq: '123.700', label: 'Norwood Tower',       sub: 'KOWD — 5mi away!',          color: '#ffd54f', mode: 'am' },
+  { freq: '122.800', label: 'Norwood UNICOM',      sub: 'KOWD after-hours CTAF',     color: '#ffd54f', mode: 'am' },
+  { freq: '119.175', label: 'Norwood ATIS',        sub: 'KOWD weather/info',         color: '#ffd54f', mode: 'am' },
+  { freq: '122.700', label: 'Mansfield CTAF',      sub: '1B9 ~8mi — uncontrolled',   color: '#ffd54f', mode: 'am' },
+  // ── ATC / Aircraft (AM) ──
+  { freq: '128.800', label: 'Approach Control',   sub: 'TRACON arrivals/departures', color: '#4fc3f7', mode: 'am' },
+  { freq: '124.000', label: 'Approach South',     sub: 'South sector',              color: '#4fc3f7', mode: 'am' },
+  { freq: '133.000', label: 'Approach North',     sub: 'North sector',              color: '#4fc3f7', mode: 'am' },
+  { freq: '128.550', label: 'Logan Tower',         sub: 'Runway control',            color: '#29b6f6', mode: 'am' },
+  { freq: '121.900', label: 'Logan Ground',        sub: 'Taxiway/ground ops',        color: '#29b6f6', mode: 'am' },
+  { freq: '135.000', label: 'Logan Clearance',     sub: 'IFR clearance delivery',    color: '#29b6f6', mode: 'am' },
+  { freq: '121.500', label: 'Guard / Emergency',   sub: 'International emergency',   color: '#ff5252', mode: 'am' },
+  // ── Ham Radio (FM) ──
+  { freq: '146.520', label: '2m Calling',          sub: 'National simplex calling',  color: '#66bb6a', mode: 'fm' },
+  { freq: '146.685', label: 'W1MRA Repeater',      sub: 'VHF FM Repeater (-600 PL67)',color: '#66bb6a', mode: 'fm' },
+  { freq: '147.150', label: 'K1RX Repeater',       sub: 'Eastern MA (+600)',         color: '#66bb6a', mode: 'fm' },
+  { freq: '146.955', label: 'WA1YQK Repeater',     sub: 'MA 2m (-600)',              color: '#66bb6a', mode: 'fm' },
+  { freq: '449.275', label: '70cm Repeater',        sub: 'UHF FM Repeater',           color: '#aed581', mode: 'fm' },
+  // ── Fire / EMS (FM) ──
+  { freq: '155.1953', label: 'Fire/EMS Dispatch',  sub: 'Norfolk County',            color: '#ff7043', mode: 'fm' },
+  { freq: '155.3400', label: 'Fire Dispatch',       sub: 'MA mutual aid',             color: '#ff7043', mode: 'fm' },
+  { freq: '155.3100', label: 'EMS / Ambulance',     sub: 'Regional EMS',              color: '#4caf50', mode: 'fm' },
+  // ── Weather / Other ──
+  { freq: '162.400',  label: 'NOAA Weather WX4',   sub: 'NOAA continuous',           color: '#ab47bc', mode: 'fm' },
+  { freq: '162.550',  label: 'NOAA Weather WX1',   sub: 'NOAA backup',               color: '#ab47bc', mode: 'fm' },
+];
+
+let msgCount   = 0;
+let acarsCount = 0;
+let sensorsDevices = {};
+
+let pagerSource   = null;
+let acarsSource   = null;
+let sensorsSource = null;
+
+let planesMap      = null;
+let planesMarkers  = {};
+let planesInterval = null;
+
+let shipsMap      = null;
+let shipMarkers   = {};
+let shipsInterval = null;
+
+let currentScanFreq = null;
+
+// ── Utilities ──
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Planes Leaflet map ──
+function planeIcon(hdg) {
+  return L.divIcon({
+    html: `<div style="transform:rotate(${hdg||0}deg);font-size:20px;line-height:1;
+                       text-shadow:0 0 3px #000,0 0 3px #000;">✈️</div>`,
+    className: '',
+    iconSize:   [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor:[0, -14]
+  });
+}
+
+function initPlanesMap() {
+  if (planesMap) return;
+  const zoom = siteConfig.lat === 0 && siteConfig.lon === 0 ? 3 : 9;
+  planesMap = L.map('planes-map', { zoomControl: true })
+               .setView([siteConfig.lat, siteConfig.lon], zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+    maxZoom: 18
+  }).addTo(planesMap);
+}
+
+function refreshPlanes() {
+  if (!planesMap) return;
+  fetch('/api/aircraft')
+    .then(r => r.json())
+    .then(data => {
+      const ac   = data.aircraft || [];
+      const seen = new Set();
+      ac.forEach(a => {
+        if (a.lat == null || a.lon == null) return;
+        const key    = a.hex;
+        const label  = (a.flight || a.hex || '').trim();
+        const alt    = a.altitude != null ? a.altitude + ' ft' : '—';
+        const spd    = a.speed    != null ? a.speed    + ' kt' : '—';
+        const hdg    = a.track    || 0;
+        const sqwk   = a.squawk   || '';
+        const popup  = `<b>${escHtml(label)}</b><br>Alt: ${alt}<br>Speed: ${spd}<br>Hdg: ${hdg}°${sqwk ? '<br>Squawk: ' + sqwk : ''}`;
+        seen.add(key);
+        if (planesMarkers[key]) {
+          planesMarkers[key].setLatLng([a.lat, a.lon]);
+          planesMarkers[key].setIcon(planeIcon(hdg));
+          planesMarkers[key].getPopup().setContent(popup);
+        } else {
+          planesMarkers[key] = L.marker([a.lat, a.lon], { icon: planeIcon(hdg) })
+                                 .bindPopup(popup)
+                                 .addTo(planesMap);
+        }
+      });
+      Object.keys(planesMarkers).forEach(k => {
+        if (!seen.has(k)) {
+          planesMap.removeLayer(planesMarkers[k]);
+          delete planesMarkers[k];
+        }
+      });
+    })
+    .catch(() => {});
+}
+
+// ── Ships Leaflet map ──
+function shipIcon() {
+  return L.divIcon({
+    html: `<div style="font-size:20px;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000;">🚢</div>`,
+    className: '',
+    iconSize:   [24, 24],
+    iconAnchor: [12, 12],
+    popupAnchor:[0, -14]
+  });
+}
+
+function initShipsMap() {
+  if (shipsMap) return;
+  const zoom = siteConfig.lat === 0 && siteConfig.lon === 0 ? 3 : 10;
+  shipsMap = L.map('ships-map', { zoomControl: true })
+              .setView([siteConfig.lat, siteConfig.lon], zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+    maxZoom: 18
+  }).addTo(shipsMap);
+}
+
+function refreshShips() {
+  if (!shipsMap) return;
+  fetch('/api/ais/ships')
+    .then(r => r.json())
+    .then(ships => {
+      document.getElementById('ship-count').textContent = ships.length + ' vessels';
+      const seen = new Set();
+      ships.forEach(s => {
+        const key   = String(s.mmsi);
+        const name  = s.name || ('MMSI ' + s.mmsi);
+        const popup = `<b>${escHtml(name)}</b><br>MMSI: ${s.mmsi}<br>Speed: ${s.speed} kt<br>Course: ${s.course}°`;
+        seen.add(key);
+        if (shipMarkers[key]) {
+          shipMarkers[key].setLatLng([s.lat, s.lon]);
+          shipMarkers[key].getPopup().setContent(popup);
+        } else {
+          shipMarkers[key] = L.marker([s.lat, s.lon], { icon: shipIcon() })
+                               .bindPopup(popup)
+                               .addTo(shipsMap);
+        }
+      });
+      Object.keys(shipMarkers).forEach(k => {
+        if (!seen.has(k)) {
+          shipsMap.removeLayer(shipMarkers[k]);
+          delete shipMarkers[k];
+        }
+      });
+    })
+    .catch(() => {});
+}
+
+// ── ACARS ──
+function startAcarsStream() {
+  if (acarsSource) acarsSource.close();
+  acarsSource = new EventSource('/api/acars/stream');
+  acarsSource.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      addAcarsMsg(d);
+    } catch(err) {}
+  };
+}
+
+function addAcarsMsg(d) {
+  const feed  = document.getElementById('acars-feed');
+  const empty = document.getElementById('acars-empty');
+  if (empty) empty.remove();
+
+  // Classify for color
+  const lbl = d.label || '';
+  const isFlight = ['35','SQ','PR','15','4T','B6','RA','1L','AA'].includes(lbl) || /position|flight plan|arrival|clearance/i.test(d.label_desc||'');
+  const isMaint  = ['5Z'].includes(lbl) || /maint/i.test(d.label_desc||'');
+
+  const div = document.createElement('div');
+  div.className = 'acars-msg' + (isFlight ? ' flight' : isMaint ? ' maintenance' : '');
+
+  const time  = d.timestamp ? d.timestamp.split(' ')[1] : new Date().toLocaleTimeString();
+  const freq  = d.freq  ? `${d.freq} MHz` : '';
+  const level = d.level ? `${d.level} dBm` : '';
+  const err   = d.errors > 0 ? `<span style="color:#f44">⚠ ${d.errors} err</span>` : '';
+
+  const flightBadge = d.flight ? `<span style="background:#1e3a5f;padding:2px 7px;border-radius:3px;font-weight:bold;color:#4fc3f7">${escHtml(d.flight)}</span>` : '';
+  const tailBadge   = d.tail   ? `<span style="color:#aaa;font-size:0.85em">${escHtml(d.tail)}</span>` : '';
+  const labelBadge  = lbl ? `<span style="color:#ffd740;font-size:0.8em" title="${escHtml(d.label_desc||'')}">[${escHtml(lbl)}] ${escHtml(d.label_desc||'')}</span>` : '';
+
+  const bodyText = d.text ? `<div style="margin-top:4px;color:#ccc;font-size:0.85em;word-break:break-all">${escHtml(d.text)}</div>` : '';
+
+  div.innerHTML = `
+    <div class="msg-meta" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px">
+      <div style="display:flex;gap:8px;align-items:center">${flightBadge} ${tailBadge}</div>
+      <div style="font-size:0.8em;color:#666">${time} · ${freq} · ${level} ${err}</div>
+    </div>
+    <div style="margin-top:4px">${labelBadge}</div>
+    ${bodyText}`;
+
+  feed.prepend(div);
+  acarsCount++;
+  document.getElementById('acars-count').textContent = acarsCount + ' messages';
+  while (feed.children.length > 200) feed.removeChild(feed.lastChild);
+}
+
+// ── Sensors ──
+function startSensorsStream() {
+  if (sensorsSource) sensorsSource.close();
+  sensorsSource = new EventSource('/api/sensors/stream');
+  sensorsSource.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      updateSensorCard(d);
+    } catch(err) {}
+  };
+}
+
+function fmtSensorVal(key, val) {
+  if (key.includes('temperature')) return val + '°';
+  if (key.includes('humidity'))    return val + '%';
+  if (key.includes('pressure'))    return val + ' hPa';
+  if (key === 'battery_ok')        return val ? '✓ OK' : '⚠ LOW';
+  if (key.includes('wind_speed'))  return val + ' m/s';
+  return val;
+}
+
+function updateSensorCard(data) {
+  const grid  = document.getElementById('sensors-grid');
+  const empty = document.getElementById('sensors-empty');
+  if (empty) empty.remove();
+
+  const model  = data.model || 'Unknown';
+  const devId  = data.id != null ? data.id : (data.channel || '?');
+  const rawKey = model + '_' + devId;
+  const domId  = 'sc_' + rawKey.replace(/[^a-zA-Z0-9]/g, '_');
+
+  let card = document.getElementById(domId);
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'sensor-card';
+    card.id = domId;
+    grid.appendChild(card);
+    sensorsDevices[rawKey] = true;
+    document.getElementById('sensor-count').textContent = Object.keys(sensorsDevices).length + ' devices';
+  }
+
+  const skip   = new Set(['time', 'model', 'id', 'channel']);
+  const fields = Object.entries(data)
+    .filter(([k]) => !skip.has(k))
+    .map(([k, v]) => `<div class="sensor-row"><span class="sk">${escHtml(k)}:</span> ${escHtml(fmtSensorVal(k, v))}</div>`)
+    .join('');
+
+  const now = new Date().toLocaleTimeString();
+  card.innerHTML = `<h3>${escHtml(model)}</h3>
+    <div class="sensor-ts">ID: ${escHtml(String(devId))} · ${now}</div>
+    ${fields}`;
+}
+
+// ── Pagers ──
+function parseFlexLine(line) {
+  const parts = line.split('|');
+  if (parts[0] === 'FLEX' && parts.length >= 6) {
+    return { type: 'FLEX', time: parts[1]||'', rate: parts[2]||'',
+             frame: parts[3]||'', capcode: parts[4]||'', msgtype: parts[5]||'',
+             body: parts.slice(6).join('|').trim() };
+  }
+  const pocsag = line.match(/POCSAG(\d+): Address:\s*(\S+)\s+Function:\s*(\d+)\s+(.+)?/);
+  if (pocsag) return { type: `POCSAG${pocsag[1]}`, capcode: pocsag[2], body: pocsag[4]||'' };
+  return { type: 'RAW', body: line };
+}
+
+function isReadable(body) {
+  if (!body) return false;
+  const p = body.replace(/[^\x20-\x7e]/g, '').trim();
+  return p.length > 4 && (p.length / body.length) > 0.7;
+}
+function isAlert(body) {
+  return /desat|HR\s+\d|lvl:\d|alert|alarm|critical|emergency|code/i.test(body);
+}
+
+const CAT_COLORS = { medical: '#ef5350', emergency: '#ff7043', facility: '#ab47bc', numeric: '#78909c', other: '#546e7a' };
+const CAT_ICONS  = { medical: '🏥', emergency: '🚨', facility: '🏢', numeric: '🔢', other: '📟' };
+
+function addMessage(d) {
+  const feed  = document.getElementById('pager-feed');
+  const empty = document.getElementById('empty-state');
+  if (empty) empty.remove();
+
+  // Support both old raw string and new structured object
+  if (typeof d === 'string') { d = { text: d, protocol: 'FLEX', readable: false, category: 'other' }; }
+
+  const cat      = d.category || 'other';
+  const isAlert  = cat === 'emergency' || cat === 'medical';
+  const readable = d.readable;
+
+  const div = document.createElement('div');
+  div.className = 'pager-msg' + (readable ? ' readable' : '') + (isAlert ? ' alert' : '');
+  div.style.borderLeftColor = CAT_COLORS[cat] || '#546e7a';
+
+  const time    = d.timestamp ? d.timestamp.split(' ')[1] : new Date().toLocaleTimeString();
+  const proto   = d.protocol || 'FLEX';
+  const baud    = d.baud ? `${d.baud}bd` : '';
+  const capcode = d.cap  ? `CAP ${d.cap}` : '';
+  const mtype   = d.msgtype === 'NUM' ? 'numeric' : d.msgtype === 'ALN' ? 'text' : (d.msgtype || '');
+  const icon    = CAT_ICONS[cat] || '📟';
+  const catLabel = cat.charAt(0).toUpperCase() + cat.slice(1);
+
+  const textHtml = readable
+    ? `<div style="margin-top:5px;color:#e8f4ff;font-size:0.9em;line-height:1.4">${escHtml(d.text)}</div>`
+    : d.text
+      ? `<div style="margin-top:5px;color:#4a6080;font-size:0.8em;font-family:monospace;word-break:break-all">${escHtml(d.text.substring(0,120))}${d.text.length>120?'…':''}</div>`
+      : '';
+
+  div.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">
+      <div style="display:flex;gap:6px;align-items:center">
+        <span style="font-size:1em">${icon}</span>
+        <span style="color:${CAT_COLORS[cat]};font-size:0.8em;font-weight:bold">${catLabel}</span>
+        ${d.org ? `<span style="background:#0d1f0d;padding:1px 7px;border-radius:3px;font-size:0.75em;color:#81c784;font-weight:bold">${escHtml(d.org)}</span>` : ''}
+        ${capcode ? `<span style="background:#0d1a2a;padding:1px 6px;border-radius:3px;font-size:0.75em;color:#7090b0;font-family:monospace">${capcode}</span>` : ''}
+      </div>
+      <div style="font-size:0.75em;color:#4a6080">${time} · ${proto} ${baud} · ${mtype}</div>
+    </div>
+    ${textHtml}`;
+
+  feed.prepend(div);
+  msgCount++;
+  document.getElementById('msg-count').textContent = msgCount + ' messages';
+  while (feed.children.length > 200) feed.removeChild(feed.lastChild);
+}
+
+function switchPagerFreq(freq) {
+  fetch('/api/pagers/freq', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({freq})})
+    .then(r => r.json()).then(d => {
+      // Clear feed and restart stream
+      document.getElementById('pager-feed').innerHTML = '<div class="empty-state" id="empty-state">Tuning to ' + d.label + '...</div>';
+      msgCount = 0;
+      document.getElementById('msg-count').textContent = '0 messages';
+      if (pagerSource) { pagerSource.close(); pagerSource = null; }
+      setTimeout(startPagerStream, 3000);
+    });
+}
+
+function startPagerStream() {
+  if (pagerSource) pagerSource.close();
+  pagerSource = new EventSource('/api/pagers/stream');
+  pagerSource.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      addMessage(d);
+    } catch(err) {}
+  };
+  pagerSource.onerror = () => {
+    document.getElementById('status-dot').style.background = '#ff5252';
+    document.getElementById('status-dot').style.boxShadow  = '0 0 6px #ff5252';
+  };
+}
+
+// ── Scanner ──
+function buildFreqList() {
+  const list = document.getElementById('freq-list');
+  FREQUENCIES.forEach(f => {
+    const btn = document.createElement('div');
+    btn.className = 'freq-btn';
+    btn.dataset.freq = f.freq;
+    btn.style.cssText = `cursor:pointer;padding:10px 12px;border:1px solid #1a2840;
+      border-left:3px solid ${f.color};border-radius:4px;margin-bottom:6px;transition:all 0.2s;`;
+    const modeBadge = `<span style="font-size:0.65rem;background:#1a2840;padding:1px 5px;border-radius:3px;color:${f.mode==='am'?'#ffd740':'#66bb6a'}">${(f.mode||'fm').toUpperCase()}</span>`;
+    btn.innerHTML = `
+      <div style="color:#c0d8f0;font-size:0.85rem;font-weight:bold;display:flex;justify-content:space-between">${f.freq} MHz ${modeBadge}</div>
+      <div style="color:#7090b0;font-size:0.75rem;">${f.label}</div>
+      <div style="color:#4a6060;font-size:0.7rem;">${f.sub}</div>`;
+    btn.addEventListener('click', () => tuneScanner(f));
+    btn.addEventListener('mouseenter', () => btn.style.borderColor = f.color);
+    btn.addEventListener('mouseleave', () => { if (btn.dataset.freq !== currentScanFreq) btn.style.borderColor = '#1a2840'; });
+    list.appendChild(btn);
+  });
+}
+
+function tuneScanner(f) {
+  document.querySelectorAll('.freq-btn').forEach(b => b.style.background = 'transparent');
+  const sel = document.querySelector(`.freq-btn[data-freq="${f.freq}"]`);
+  if (sel) sel.style.background = '#0d1a2a';
+  currentScanFreq = f.freq;
+  document.getElementById('scanner-freq-display').textContent = f.freq + ' MHz';
+  document.getElementById('now-playing').textContent      = '⏳ Tuning to ' + f.freq + ' MHz…';
+  document.getElementById('now-playing-desc').textContent = f.sub;
+  const audio = document.getElementById('scanner-audio');
+  const hint  = document.getElementById('scanner-hint');
+  audio.pause();
+  audio.src = '';
+  setTimeout(() => {
+    const m = f.mode || 'fm';
+    audio.src = `/api/audio/stream?freq=${f.freq}&mode=${m}&t=${Date.now()}`;
+    audio.load();
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
+        document.getElementById('now-playing').textContent = '🔴 LIVE — ' + f.label;
+        hint.style.display = 'none';
+      }).catch(() => {
+        document.getElementById('now-playing').textContent = f.label;
+        hint.style.display = 'block';  // show "tap play" hint
+      });
+    }
+  }, 800); // small delay so server can kill old process first
+}
+
+// ── APRS ──
+let aprsSource  = null;
+let aprsMap     = null;
+let aprsMarkers = {};
+let aprsStationCount = 0;
+
+const APRS_ICONS = { mobile: '🚗', weather: '🌡️', digi: '📡', station: '📻', unknown: '📍' };
+const APRS_COLORS = { mobile: '#ffd54f', weather: '#4fc3f7', digi: '#ab47bc', station: '#66bb6a', unknown: '#78909c' };
+
+function initAprsMap() {
+  if (aprsMap) return;
+  const zoom = siteConfig.lat === 0 && siteConfig.lon === 0 ? 3 : 10;
+  aprsMap = L.map('aprs-map').setView([siteConfig.lat, siteConfig.lon], zoom);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap', maxZoom: 17
+  }).addTo(aprsMap);
+  // Station marker
+  if (siteConfig.lat !== 0 || siteConfig.lon !== 0) {
+    L.circleMarker([siteConfig.lat, siteConfig.lon], { radius: 6, color: '#4fc3f7', fillColor: '#4fc3f7', fillOpacity: 0.8 })
+      .bindPopup(`📡 ${siteConfig.name}`).addTo(aprsMap);
+  }
+  // Load existing stations
+  fetch('/api/aprs/stations').then(r => r.json()).then(stations => {
+    stations.forEach(s => updateAprsStation(s));
+  });
+}
+
+function updateAprsStation(s) {
+  const color = APRS_COLORS[s.type] || '#78909c';
+  const icon  = APRS_ICONS[s.type]  || '📍';
+
+  // Update sidebar
+  let el = document.getElementById('aprs_' + s.callsign.replace(/[^a-zA-Z0-9]/g,'_'));
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'aprs_' + s.callsign.replace(/[^a-zA-Z0-9]/g,'_');
+    el.style.cssText = `padding:8px;margin-bottom:6px;border-radius:4px;border-left:3px solid ${color};
+      background:#0a1020;cursor:pointer;font-size:0.82em;`;
+    el.onclick = () => { if(s.lat) aprsMap.setView([s.lat, s.lon], 13); };
+    document.getElementById('aprs-list').appendChild(el);
+    aprsStationCount++;
+    document.getElementById('aprs-count').textContent = aprsStationCount + ' stations';
+  }
+  let wxStr = '';
+  if (s.temp_f !== undefined) wxStr = ` · ${s.temp_f}°F`;
+  if (s.wind_spd !== undefined) wxStr += ` ${s.wind_spd}mph`;
+  el.innerHTML = `<div style="color:${color};font-weight:bold">${icon} ${s.callsign}</div>
+    <div style="color:#7090b0">${s.comment || s.raw.substring(0,50)}${wxStr}</div>
+    <div style="color:#2a4060;font-size:0.75em">${s.ts}${s.lat ? ` · ${s.lat.toFixed(3)},${s.lon.toFixed(3)}` : ''}</div>`;
+
+  // Map marker
+  if (s.lat && aprsMap) {
+    if (aprsMarkers[s.callsign]) aprsMap.removeLayer(aprsMarkers[s.callsign]);
+    const marker = L.circleMarker([s.lat, s.lon], {
+      radius: s.type === 'digi' ? 10 : 7,
+      color: color, fillColor: color, fillOpacity: 0.7, weight: 2
+    }).bindPopup(`<b>${icon} ${s.callsign}</b><br>${s.comment || ''}<br>${s.ts}`);
+    marker.addTo(aprsMap);
+    aprsMarkers[s.callsign] = marker;
+  }
+}
+
+function startAprsStream() {
+  initAprsMap();
+  setTimeout(() => { if (aprsMap) aprsMap.invalidateSize(); }, 200);
+  if (aprsSource) aprsSource.close();
+  aprsSource = new EventSource('/api/aprs/stream');
+  aprsSource.onmessage = e => {
+    try { updateAprsStation(JSON.parse(e.data)); } catch(err) {}
+  };
+}
+
+// ── VLF Spectrum ──
+let vlfInterval = null;
+
+function drawVlfSpectrum(data, noise, stations) {
+  const canvas = document.getElementById('vlf-canvas');
+  if (!canvas) return;
+  canvas.width  = canvas.offsetWidth  || 800;
+  canvas.height = canvas.offsetHeight || 220;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const PAD = { l: 48, r: 12, t: 16, b: 36 };
+  const plotW = W - PAD.l - PAD.r;
+  const plotH = H - PAD.t - PAD.b;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#050d1a';
+  ctx.fillRect(0, 0, W, H);
+
+  if (!data || !data.length) {
+    ctx.fillStyle = '#4a6080'; ctx.font = '14px monospace';
+    ctx.fillText('Scanning VLF spectrum...', W/2 - 80, H/2);
+    return;
+  }
+
+  const minF = data[0].freq, maxF = data[data.length-1].freq;
+  const powers = data.map(d => d.power);
+  const minP = Math.min(...powers) - 2, maxP = Math.max(...powers) + 3;
+
+  const fx = f => PAD.l + (f - minF) / (maxF - minF) * plotW;
+  const py = p => PAD.t + plotH - (p - minP) / (maxP - minP) * plotH;
+
+  // Grid lines
+  ctx.strokeStyle = '#0d1f33'; ctx.lineWidth = 1;
+  for (let f = 10; f <= 100; f += 10) {
+    const x = fx(f);
+    ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + plotH); ctx.stroke();
+    ctx.fillStyle = '#2a4060'; ctx.font = '10px monospace';
+    ctx.fillText(f + 'k', x - 8, PAD.t + plotH + 14);
+  }
+
+  // Noise floor line
+  const nyPos = py(noise);
+  ctx.strokeStyle = '#1e3a5f'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(PAD.l, nyPos); ctx.lineTo(PAD.l + plotW, nyPos); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#1e3a5f'; ctx.font = '9px monospace';
+  ctx.fillText('noise', PAD.l + 2, nyPos - 3);
+
+  // Station markers
+  if (stations) {
+    Object.entries(stations).forEach(([freqStr, st]) => {
+      const f = parseFloat(freqStr);
+      if (f < minF || f > maxF) return;
+      const x = fx(f);
+      ctx.strokeStyle = st.color + '88'; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + plotH); ctx.stroke();
+      ctx.setLineDash([]);
+    });
+  }
+
+  // Spectrum fill
+  ctx.beginPath();
+  ctx.moveTo(fx(data[0].freq), PAD.t + plotH);
+  data.forEach(d => ctx.lineTo(fx(d.freq), py(d.power)));
+  ctx.lineTo(fx(data[data.length-1].freq), PAD.t + plotH);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, PAD.t, 0, PAD.t + plotH);
+  grad.addColorStop(0, '#4fc3f755');
+  grad.addColorStop(1, '#4fc3f711');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Spectrum line
+  ctx.beginPath();
+  ctx.strokeStyle = '#4fc3f7'; ctx.lineWidth = 1.5;
+  data.forEach((d, i) => i === 0 ? ctx.moveTo(fx(d.freq), py(d.power)) : ctx.lineTo(fx(d.freq), py(d.power)));
+  ctx.stroke();
+
+  // Station labels (top)
+  if (stations) {
+    Object.entries(stations).forEach(([freqStr, st]) => {
+      const f = parseFloat(freqStr);
+      if (f < minF || f > maxF) return;
+      const x = fx(f);
+      ctx.fillStyle = st.color;
+      ctx.font = 'bold 9px monospace';
+      ctx.save(); ctx.translate(x + 3, PAD.t + 10); ctx.rotate(-Math.PI/6);
+      ctx.fillText(st.name, 0, 0); ctx.restore();
+    });
+  }
+}
+
+function updateVlfStations(data, noise, stations) {
+  const container = document.getElementById('vlf-stations');
+  if (!container || !stations) return;
+  container.innerHTML = '';
+  if (!data || !data.length) return;
+
+  Object.entries(stations).forEach(([freqStr, st]) => {
+    const f = parseFloat(freqStr);
+    const nearest = data.reduce((best, d) => Math.abs(d.freq - f) < Math.abs(best.freq - f) ? d : best, data[0]);
+    const aboveNoise = nearest.power - noise;
+    const detected = aboveNoise > 4;
+    const card = document.createElement('div');
+    card.style.cssText = `padding:8px 12px;border-radius:4px;border:1px solid ${detected ? st.color+'66' : '#1e3a5f'};
+      background:${detected ? '#0a1a0a' : '#080d18'};min-width:160px;`;
+    card.innerHTML = `
+      <div style="color:${detected ? st.color : '#2a4060'};font-weight:bold;font-size:0.85em">${st.name} — ${f} kHz</div>
+      <div style="color:#4a6080;font-size:0.75em">${st.label}</div>
+      <div style="color:#2a4060;font-size:0.72em">${st.loc}</div>
+      <div style="color:${detected ? '#66bb6a' : '#2a4060'};font-size:0.78em;margin-top:4px">
+        ${detected ? '✅ DETECTED' : '——'} ${aboveNoise > 0 ? '+' : ''}${aboveNoise.toFixed(1)} dB
+      </div>`;
+    container.appendChild(card);
+  });
+}
+
+function refreshVlf() {
+  fetch('/api/vlf/scan').then(r => r.json()).then(d => {
+    if (d.data && d.data.length) {
+      drawVlfSpectrum(d.data, d.noise, d.stations);
+      updateVlfStations(d.data, d.noise, d.stations);
+      document.getElementById('vlf-ts').textContent = 'Last scan: ' + d.ts;
+      document.getElementById('vlf-status').textContent = d.data.length + ' bins';
+    } else {
+      document.getElementById('vlf-ts').textContent = 'Scanning...';
+    }
+  }).catch(() => {});
+}
+
+function startVlf() {
+  if (vlfInterval) clearInterval(vlfInterval);
+  refreshVlf();
+  vlfInterval = setInterval(refreshVlf, 20000);
+}
+
+// ── Mode switching ──
+function stopAllStreams() {
+  if (pagerSource)   { pagerSource.close();   pagerSource   = null; }
+  if (acarsSource)   { acarsSource.close();   acarsSource   = null; }
+  if (sensorsSource) { sensorsSource.close(); sensorsSource = null; }
+  if (aprsSource)    { aprsSource.close();    aprsSource    = null; }
+  if (vlfInterval)   { clearInterval(vlfInterval);    vlfInterval   = null; }
+  if (planesInterval) { clearInterval(planesInterval); planesInterval = null; }
+  if (shipsInterval)  { clearInterval(shipsInterval);  shipsInterval  = null; }
+}
+
+function activateMode(mode) {
+  if (mode === 'planes') {
+    initPlanesMap();
+    setTimeout(() => { if (planesMap) planesMap.invalidateSize(); refreshPlanes(); }, 150);
+    planesInterval = setInterval(refreshPlanes, 2000);
+  } else if (mode === 'pagers') {
+    startPagerStream();
+  } else if (mode === 'ais') {
+    initShipsMap();
+    setTimeout(() => { if (shipsMap) shipsMap.invalidateSize(); refreshShips(); }, 150);
+    shipsInterval = setInterval(refreshShips, 5000);
+  } else if (mode === 'acars') {
+    startAcarsStream();
+  } else if (mode === 'sensors') {
+    startSensorsStream();
+  } else if (mode === 'aprs') {
+    startAprsStream();
+  } else if (mode === 'vlf') {
+    startVlf();
+  }
+  // scanner: audio is on-demand
+}
+
+function switchMode(mode, btn) {
+  if (btn.classList.contains('active')) return;
+
+  stopAllStreams();
+
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('active', 'switching');
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('switching');
+
+  fetch(`/api/mode/${mode}`, { method: 'POST' })
+    .then(() => {
+      setTimeout(() => {
+        btn.classList.remove('switching');
+        btn.classList.add('active');
+        const panel = document.getElementById(`${mode}-panel`);
+        if (panel) panel.classList.add('active');
+        activateMode(mode);
+      }, 2500);
+    });
+}
+
+// ── Init ──
+buildFreqList();
+
+// ── Device status polling ──
+const sdrStatusEl = (() => {
+  const dot = document.getElementById('status-dot');
+  // Replace with a richer indicator
+  const wrap = document.createElement('div');
+  wrap.id = 'sdr-status-bar';
+  wrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:0.78em;color:#aaa';
+  wrap.innerHTML = `<div id="sdr-dot" style="width:9px;height:9px;border-radius:50%;background:#888;box-shadow:0 0 6px #888;flex-shrink:0"></div>
+                    <span id="sdr-status-text">Checking device...</span>`;
+  dot.replaceWith(wrap);
+  return wrap;
+})();
+
+function updateDeviceStatus() {
+  fetch('/api/device/status').then(r => r.json()).then(d => {
+    const dot  = document.getElementById('sdr-dot');
+    const text = document.getElementById('sdr-status-text');
+    if (d.ok && d.process && d.process !== 'starting') {
+      dot.style.background  = '#4caf50';
+      dot.style.boxShadow   = '0 0 8px #4caf50';
+      text.style.color      = '#4caf50';
+      text.textContent      = `● SDR OK — ${d.process} (PID ${d.pid})`;
+    } else if (d.ok) {
+      dot.style.background  = '#ffd740';
+      dot.style.boxShadow   = '0 0 8px #ffd740';
+      text.style.color      = '#ffd740';
+      text.textContent      = '● SDR starting...';
+    } else {
+      dot.style.background  = '#f44336';
+      dot.style.boxShadow   = '0 0 8px #f44336';
+      text.style.color      = '#f44336';
+      text.textContent      = '⚠ SDR not active — check device';
+    }
+  }).catch(() => {
+    const dot  = document.getElementById('sdr-dot');
+    const text = document.getElementById('sdr-status-text');
+    dot.style.background = '#f44336';
+    text.style.color     = '#f44336';
+    text.textContent     = '⚠ Server unreachable';
+  });
+}
+updateDeviceStatus();
+setInterval(updateDeviceStatus, 5000);
+
+window.addEventListener('load', () => {
+  // Load site config before initializing maps so lat/lon is available
+  fetch('/api/config').then(r => r.json()).then(c => { siteConfig = c; }).catch(() => {}).finally(() => {
+    fetch('/api/mode').then(r => r.json()).then(d => {
+      const mode = d.mode || 'planes';
+
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      const panel = document.getElementById(`${mode}-panel`);
+      if (panel) panel.classList.add('active');
+
+      activateMode(mode);
+    }).catch(() => {
+      // default: start planes
+      initPlanesMap();
+      setTimeout(() => { if (planesMap) planesMap.invalidateSize(); refreshPlanes(); }, 150);
+      planesInterval = setInterval(refreshPlanes, 2000);
+    });
+  });
+});
+</script>
+</body>
+</html>
