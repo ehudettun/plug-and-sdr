@@ -5,44 +5,70 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SDR Dashboard</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;700&display=swap">
 <style>
+  :root {
+    --bg: #070b14; --bg2: #0d1225; --line: #1e3a5f; --line-soft: #16273f;
+    --accent: #4fc3f7; --text: #e0e8ff; --dim: #7090b0; --faint: #4a6080;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0a0e1a; color: #e0e8ff; font-family: 'Courier New', monospace; height: 100vh; display: flex; flex-direction: column; }
+  body {
+    background: radial-gradient(1200px 600px at 70% -10%, #0e1830 0%, var(--bg) 55%) fixed;
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    height: 100vh; display: flex; flex-direction: column;
+  }
 
   header {
-    background: #0d1225;
-    border-bottom: 1px solid #1e3a5f;
-    padding: 12px 20px;
+    background: rgba(13,18,37,0.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    padding: 10px 20px;
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 16px;
     flex-shrink: 0;
   }
-  header h1 { font-size: 1.1rem; color: #4fc3f7; letter-spacing: 2px; text-transform: uppercase; }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #4caf50; box-shadow: 0 0 6px #4caf50; animation: pulse 2s infinite; }
+  header h1 {
+    font-family: 'Orbitron', 'JetBrains Mono', monospace;
+    font-size: 1.0rem;
+    background: linear-gradient(90deg, #4fc3f7, #9c6bff);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 3px; text-transform: uppercase; white-space: nowrap;
+  }
+  .hdr-clock { color: var(--faint); font-size: 0.7rem; white-space: nowrap; }
+  .hdr-clock b { color: var(--accent); font-weight: 500; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #4caf50; box-shadow: 0 0 6px #4caf50; animation: pulse 2s infinite; flex-shrink: 0; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
   nav { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
   .tab-btn {
     background: transparent;
-    border: 1px solid #1e3a5f;
-    color: #7090b0;
-    padding: 6px 14px;
-    border-radius: 4px;
+    border: 1px solid transparent;
+    color: var(--dim);
+    padding: 6px 12px;
+    border-radius: 999px;
     cursor: pointer;
     font-family: inherit;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     letter-spacing: 1px;
-    transition: all 0.2s;
+    transition: all 0.18s;
   }
-  .tab-btn:hover { border-color: #4fc3f7; color: #4fc3f7; }
-  .tab-btn.active { background: #1e3a5f; border-color: #4fc3f7; color: #4fc3f7; box-shadow: 0 0 10px rgba(79,195,247,0.2); }
+  .tab-btn:hover { border-color: var(--line); color: var(--accent); background: rgba(79,195,247,0.06); }
+  .tab-btn.active {
+    background: linear-gradient(180deg, rgba(79,195,247,0.18), rgba(79,195,247,0.08));
+    border-color: var(--accent); color: var(--accent);
+    box-shadow: 0 0 14px rgba(79,195,247,0.25), inset 0 0 8px rgba(79,195,247,0.08);
+  }
   .tab-btn .loading { display: none; }
   .tab-btn.switching .loading { display: inline; }
   .tab-btn.switching .label { display: none; }
 
   .panel { display: none; flex: 1; overflow: hidden; min-height: 0; }
-  .panel.active { display: flex; flex-direction: column; }
+  .panel.active { display: flex; flex-direction: column; animation: panelIn 0.25s ease; }
+  @keyframes panelIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
   /* ── Shared panel header ── */
   .pager-header {
@@ -60,7 +86,14 @@
   .pager-count { margin-left: auto; }
 
   /* ── Leaflet maps ── */
-  #planes-map, #ships-map { flex: 1; min-height: 0; }
+  #ships-map { flex: 1; min-height: 0; }
+
+  /* ── Planes sidebar ── */
+  #planes-list::-webkit-scrollbar { width: 5px; }
+  #planes-list::-webkit-scrollbar-track { background: #0a0e1a; }
+  #planes-list::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
+  #planes-tbody tr:hover { background: #0d1a2a; }
+  #planes-tbody td { font-family: 'Courier New', monospace; }
   .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(1.1); }
   .leaflet-popup-content-wrapper {
     background: #0d1225; border: 1px solid #2a4a6f;
@@ -142,6 +175,103 @@
 
   /* ── Scanner ── */
   #scanner-panel .pager-header { flex-shrink: 0; }
+
+  /* ── Meters ── */
+  #meters-grid {
+    flex: 1; overflow-y: auto; padding: 16px;
+    display: flex; flex-wrap: wrap; gap: 14px; align-content: flex-start;
+  }
+  #meters-grid::-webkit-scrollbar { width: 6px; }
+  #meters-grid::-webkit-scrollbar-track { background: #0a0e1a; }
+  #meters-grid::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
+
+  .meter-card {
+    background: #0d1225; border: 1px solid #1e3a5f;
+    border-radius: 6px; padding: 16px; width: 260px; min-height: 150px;
+    transition: border-color 0.3s;
+  }
+  .meter-card:hover { border-color: #2a5a8f; }
+  .meter-card.my-house {
+    border-color: #4fc3f7;
+    box-shadow: 0 0 16px rgba(79,195,247,0.15);
+  }
+  .meter-label { color: #4fc3f7; font-size: 0.95rem; font-weight: bold; margin-bottom: 8px; letter-spacing: 1px; }
+  .meter-card.my-house .meter-label { color: #ffd740; }
+  .meter-consumption { font-size: 1.5rem; color: #e0e8ff; margin: 6px 0; letter-spacing: 1px; }
+  .meter-rate { font-size: 0.85rem; color: #66bb6a; margin: 4px 0; }
+  .meter-ts { font-size: 0.72rem; color: #4a6080; margin-top: 6px; }
+  .meter-count { font-size: 0.72rem; color: #3a5070; margin-top: 2px; }
+  .meter-live-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    margin-left: 5px; vertical-align: middle; flex-shrink: 0;
+  }
+  .meter-live-dot.live   { background: #4caf50; box-shadow: 0 0 5px #4caf50; }
+  .meter-live-dot.recent { background: #ffd740; }
+  .meter-live-dot.stale  { background: #334; }
+  .meter-bar-bg { background: #0a1428; border-radius: 3px; height: 4px; margin-top: 10px; overflow: hidden; }
+  .meter-bar { background: #4fc3f7; height: 4px; border-radius: 3px; transition: width 0.6s ease; }
+  .meter-card.my-house .meter-bar { background: #ffd740; }
+
+  /* ── Scanner v2 ── */
+  #scanner-sidebar { width: 300px; border-right: 1px solid var(--line); display: flex; flex-direction: column; flex-shrink: 0; min-height: 0; }
+  #freq-search {
+    margin: 10px 10px 6px; padding: 8px 12px; background: #0a1428; color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; font-family: inherit; font-size: 0.8rem; outline: none;
+  }
+  #freq-search:focus { border-color: var(--accent); box-shadow: 0 0 8px rgba(79,195,247,0.15); }
+  #freq-list { overflow-y: auto; padding: 0 10px 10px; flex: 1; }
+  #freq-list::-webkit-scrollbar { width: 5px; }
+  #freq-list::-webkit-scrollbar-track { background: transparent; }
+  #freq-list::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+  .freq-group-hdr {
+    position: sticky; top: 0; background: #0a1020; z-index: 2;
+    font-size: 0.68rem; letter-spacing: 2px; color: var(--faint);
+    padding: 8px 2px 6px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;
+  }
+  .freq-group-hdr .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .freq-group-hdr .cnt { margin-left: auto; color: #2a4060; }
+  .freq-btn {
+    cursor: pointer; padding: 9px 12px; border: 1px solid var(--line-soft);
+    border-radius: 6px; margin-bottom: 6px; transition: all 0.15s;
+    background: rgba(13,18,37,0.5);
+  }
+  .freq-btn:hover { transform: translateX(2px); }
+  .freq-btn.tuned { background: #0d1a2a; box-shadow: 0 0 10px rgba(79,195,247,0.12); }
+  #custom-tune { display: flex; gap: 6px; padding: 10px; border-top: 1px solid var(--line-soft); }
+  #custom-tune input {
+    flex: 1; min-width: 0; padding: 7px 10px; background: #0a1428; color: var(--text);
+    border: 1px solid var(--line); border-radius: 6px; font-family: inherit; font-size: 0.8rem; outline: none;
+  }
+  #custom-tune input:focus { border-color: var(--accent); }
+  #custom-tune select, #custom-tune button {
+    background: #0d1a2a; color: var(--accent); border: 1px solid var(--line);
+    border-radius: 6px; padding: 0 10px; cursor: pointer; font-family: inherit; font-size: 0.78rem;
+  }
+  #custom-tune button:hover { border-color: var(--accent); box-shadow: 0 0 8px rgba(79,195,247,0.2); }
+  .np-card {
+    background: rgba(13,18,37,0.7); border: 1px solid var(--line); border-radius: 12px;
+    padding: 26px 36px; text-align: center; min-width: 380px; max-width: 90%;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+  }
+  .np-freq { font-size: 2rem; color: var(--accent); letter-spacing: 2px; margin-bottom: 4px; font-weight: 700; }
+  .eq { display: flex; gap: 3px; height: 26px; align-items: flex-end; justify-content: center; margin: 12px 0 2px; visibility: hidden; }
+  .eq span { width: 4px; background: linear-gradient(180deg, #4fc3f7, #1e5f8f); border-radius: 2px; height: 20%; }
+  .np-card.playing .eq { visibility: visible; }
+  .np-card.playing .eq span { animation: eqB 0.9s ease-in-out infinite; }
+  .np-card.playing .eq span:nth-child(2n) { animation-duration: 0.7s; animation-delay: 0.12s; }
+  .np-card.playing .eq span:nth-child(3n) { animation-duration: 1.1s; animation-delay: 0.25s; }
+  .np-card.playing .eq span:nth-child(5n) { animation-duration: 0.6s; animation-delay: 0.4s; }
+  @keyframes eqB { 0%,100% { height: 15%; } 50% { height: 95%; } }
+
+  @media (max-width: 900px) {
+    header { gap: 10px; padding: 8px 12px; }
+    .hdr-clock { display: none; }
+    nav { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+    nav::-webkit-scrollbar { display: none; }
+    #scanner-sidebar { width: 240px; }
+    .np-card { min-width: 0; padding: 18px; }
+  }
 </style>
 </head>
 <body>
@@ -149,6 +279,7 @@
 <header>
   <div class="status-dot" id="status-dot"></div>
   <h1>📡 SDR Dashboard</h1>
+  <div class="hdr-clock" id="hdr-clock"></div>
   <nav>
     <button class="tab-btn active" data-mode="planes"  onclick="switchMode('planes',this)">
       <span class="label">✈️ PLANES</span><span class="loading">⏳ TUNING...</span>
@@ -174,12 +305,24 @@
     <button class="tab-btn" data-mode="vlf" onclick="switchMode('vlf',this)">
       <span class="label">🌊 VLF</span><span class="loading">⏳ SCANNING...</span>
     </button>
+    <button class="tab-btn" data-mode="meters" onclick="switchMode('meters',this)">
+      <span class="label">📡 METERS</span><span class="loading">⏳ TUNING...</span>
+    </button>
+    <button class="tab-btn" data-mode="weather" onclick="switchMode('weather',this)">
+      <span class="label">⛅ WEATHER</span><span class="loading">⏳ TUNING...</span>
+    </button>
+    <button class="tab-btn" data-mode="waterfall" onclick="switchMode('waterfall',this)">
+      <span class="label">📊 WATERFALL</span><span class="loading">⏳ LOADING...</span>
+    </button>
   </nav>
 </header>
 
 <!-- ── Planes Panel ── -->
 <div class="panel active" id="planes-panel">
-  <div id="planes-map"></div>
+  <div style="position:relative;flex:1;min-height:0;">
+    <div id="planes-map" style="position:absolute;top:0;left:0;right:0;bottom:0;"></div>
+    <div id="plane-count" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:1000;background:rgba(10,14,26,0.8);border:1px solid #1e3a5f;border-radius:4px;padding:3px 10px;font-size:0.72rem;color:#4fc3f7;pointer-events:none;letter-spacing:1px;">0 aircraft</div>
+  </div>
 </div>
 
 <!-- ── Pagers Panel ── -->
@@ -207,17 +350,26 @@
     <span id="scanner-status" style="margin-left:auto; color:#4caf50;">▶ LIVE</span>
   </div>
   <div style="display:flex; flex:1; overflow:hidden; min-height:0;">
-    <div style="width:260px; border-right:1px solid #1e3a5f; overflow-y:auto; padding:10px; flex-shrink:0;">
-      <div style="font-size:0.7rem; color:#4a6080; letter-spacing:1px; margin-bottom:10px;">FREQUENCIES</div>
+    <div id="scanner-sidebar">
+      <input id="freq-search" type="text" placeholder="🔎 Filter — name or MHz"
+             oninput="renderFreqList(this.value)" autocomplete="off">
       <div id="freq-list"></div>
-    </div>
-    <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px;">
-      <div style="text-align:center; color:#4a6080; font-size:0.85rem;">
-        <div style="font-size:2rem; margin-bottom:10px;">🎙️</div>
-        <div id="now-playing" style="color:#4fc3f7; font-size:1rem; margin-bottom:6px;">Select a frequency</div>
-        <div id="now-playing-desc" style="color:#4a6080; font-size:0.8rem;"></div>
+      <div id="custom-tune">
+        <input id="custom-freq" type="number" step="0.001" min="24" max="1766" placeholder="MHz — any freq"
+               onkeydown="if(event.key==='Enter')tuneCustom()">
+        <select id="custom-mode"><option value="fm">FM</option><option value="am">AM</option></select>
+        <button onclick="tuneCustom()">TUNE</button>
       </div>
-      <audio id="scanner-audio" controls style="width:320px; filter:invert(0.8) hue-rotate(180deg);"></audio>
+    </div>
+    <div style="flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:16px;">
+      <div class="np-card" id="np-card">
+        <div style="font-size:1.6rem; margin-bottom:6px;">🎙️</div>
+        <div class="np-freq" id="scanner-freq-big">——.———</div>
+        <div id="now-playing" style="color:#4fc3f7; font-size:0.95rem; margin-bottom:4px;">Select a frequency</div>
+        <div id="now-playing-desc" style="color:#4a6080; font-size:0.78rem;"></div>
+        <div class="eq"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        <audio id="scanner-audio" controls style="width:320px; max-width:100%; margin-top:8px; filter:invert(0.8) hue-rotate(180deg);"></audio>
+      </div>
       <div id="scanner-hint" style="font-size:0.8rem; color:#4fc3f7; text-align:center; padding:6px 12px;
            background:#0d1a2a; border-radius:6px; border:1px solid #1e3a5f; display:none;">
         ▶ Tap play above to start audio
@@ -294,6 +446,65 @@
   </div>
 </div>
 
+<!-- ── Meters Panel ── -->
+<div class="panel" id="meters-panel">
+  <div class="pager-header">
+    <span>UTILITY METERS — rtlamr ERT</span>
+    <span class="pager-freq">SCM / IDM / R900</span>
+    <span id="meters-count" class="pager-count">0 meters</span>
+  </div>
+  <div id="meters-grid">
+    <div class="empty-state" id="meters-empty" style="width:100%;">Loading meter data...</div>
+  </div>
+</div>
+
+<!-- ── Weather Panel ── -->
+<div class="panel" id="weather-panel">
+  <div class="pager-header">
+    <span>⛅ WEATHER RADIO</span>
+    <span class="pager-freq">119.95 MHz — Boston Logan AWOS</span>
+    <span id="weather-status" class="pager-count">LIVE</span>
+  </div>
+  <div style="flex:1;padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0a1020;">
+    <div style="font-size:4rem;margin-bottom:20px;">🌤️</div>
+    <div style="font-size:1.2rem;color:#4fc3f7;margin-bottom:10px;">Boston Logan Airport AWOS</div>
+    <div style="font-size:0.9rem;color:#7090b0;margin-bottom:30px;">Automated Weather Observing System — Continuous Broadcast</div>
+    <audio controls autoplay style="width:80%;max-width:500px;">
+      <source src="/weather-stream" type="audio/x-wav">
+      Your browser does not support the audio element.
+    </audio>
+    <div style="margin-top:30px;padding:15px;background:#0d1225;border-radius:8px;border:1px solid #1e3a5f;">
+      <div style="color:#888;font-size:0.8rem;margin-bottom:5px;">Also available:</div>
+      <a href="http://10.0.0.229:8888/static/11995mhz.wav" target="_blank" style="color:#4fc3f7;text-decoration:none;">🎧 Listen to recording (119.95 MHz)</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── Waterfall Panel ── -->
+<div class="panel" id="waterfall-panel">
+  <div class="pager-header">
+    <span>📊 RF WATERFALL</span>
+    <select id="waterfall-freq" onchange="setWaterfallFreq(this.value)" style="background:#0d1a2a;color:#4fc3f7;border:1px solid #1e3a5f;border-radius:4px;padding:2px 6px;font-size:0.8em;cursor:pointer">
+      <option value="315">315 MHz — Car remotes / Garage doors</option>
+      <option value="433.92">433.92 MHz — Weather sensors / Doorbells</option>
+      <option value="345">345 MHz — Honeywell security</option>
+      <option value="119.95">119.95 MHz — Logan AWOS</option>
+      <option value="162.55">162.55 MHz — NOAA Weather</option>
+      <option value="custom">Custom frequency...</option>
+    </select>
+    <input type="text" id="waterfall-custom" placeholder="Enter MHz" style="display:none;background:#0d1a2a;color:#4fc3f7;border:1px solid #1e3a5f;border-radius:4px;padding:2px 6px;width:100px;">
+    <span id="waterfall-status" class="pager-count">READY</span>
+  </div>
+  <div style="flex:1;padding:10px;display:flex;flex-direction:column;">
+    <canvas id="waterfall-canvas" style="width:100%;height:100%;background:#000;border-radius:4px;"></canvas>
+    <div style="display:flex;gap:10px;margin-top:10px;align-items:center;">
+      <button onclick="startWaterfall()" style="background:#1e3a5f;color:#4fc3f7;border:1px solid #4fc3f7;padding:6px 16px;border-radius:4px;cursor:pointer;font-family:inherit;">▶ START</button>
+      <button onclick="stopWaterfall()" style="background:#3a1e1e;color:#f77;padding:6px 16px;border:1px solid #f77;border-radius:4px;cursor:pointer;font-family:inherit;">⏹ STOP</button>
+      <span style="color:#7090b0;font-size:0.85rem;">Peak: <span id="waterfall-peak">—</span></span>
+    </div>
+  </div>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 // ── Site config (loaded from /api/config on startup) ──
@@ -302,31 +513,42 @@ let siteConfig = { lat: 0, lon: 0, name: 'SDR Station' };
 // ── State ──
 const FREQUENCIES = [
   // ── Local GA (AM) ──
-  { freq: '123.700', label: 'Norwood Tower',       sub: 'KOWD — 5mi away!',          color: '#ffd54f', mode: 'am' },
-  { freq: '122.800', label: 'Norwood UNICOM',      sub: 'KOWD after-hours CTAF',     color: '#ffd54f', mode: 'am' },
-  { freq: '119.175', label: 'Norwood ATIS',        sub: 'KOWD weather/info',         color: '#ffd54f', mode: 'am' },
-  { freq: '122.700', label: 'Mansfield CTAF',      sub: '1B9 ~8mi — uncontrolled',   color: '#ffd54f', mode: 'am' },
+  { group: 'Local Airports', freq: '123.700', label: 'Norwood Tower',       sub: 'KOWD — 5mi away!',          color: '#ffd54f', mode: 'am' },
+  { group: 'Local Airports', freq: '122.800', label: 'Norwood UNICOM',      sub: 'KOWD after-hours CTAF',     color: '#ffd54f', mode: 'am' },
+  { group: 'Local Airports', freq: '119.175', label: 'Norwood ATIS',        sub: 'KOWD weather/info',         color: '#ffd54f', mode: 'am' },
+  { group: 'Local Airports', freq: '122.700', label: 'Mansfield CTAF',      sub: '1B9 ~8mi — uncontrolled',   color: '#ffd54f', mode: 'am' },
   // ── ATC / Aircraft (AM) ──
-  { freq: '128.800', label: 'Approach Control',   sub: 'TRACON arrivals/departures', color: '#4fc3f7', mode: 'am' },
-  { freq: '124.000', label: 'Approach South',     sub: 'South sector',              color: '#4fc3f7', mode: 'am' },
-  { freq: '133.000', label: 'Approach North',     sub: 'North sector',              color: '#4fc3f7', mode: 'am' },
-  { freq: '128.550', label: 'Logan Tower',         sub: 'Runway control',            color: '#29b6f6', mode: 'am' },
-  { freq: '121.900', label: 'Logan Ground',        sub: 'Taxiway/ground ops',        color: '#29b6f6', mode: 'am' },
-  { freq: '135.000', label: 'Logan Clearance',     sub: 'IFR clearance delivery',    color: '#29b6f6', mode: 'am' },
-  { freq: '121.500', label: 'Guard / Emergency',   sub: 'International emergency',   color: '#ff5252', mode: 'am' },
+  { group: 'Boston ATC', freq: '128.800', label: 'Approach Control',   sub: 'TRACON arrivals/departures', color: '#4fc3f7', mode: 'am' },
+  { group: 'Boston ATC', freq: '124.000', label: 'Approach South',     sub: 'South sector',              color: '#4fc3f7', mode: 'am' },
+  { group: 'Boston ATC', freq: '133.000', label: 'Approach North',     sub: 'North sector',              color: '#4fc3f7', mode: 'am' },
+  { group: 'Boston ATC', freq: '128.550', label: 'Logan Tower',         sub: 'Runway control',            color: '#29b6f6', mode: 'am' },
+  { group: 'Boston ATC', freq: '121.900', label: 'Logan Ground',        sub: 'Taxiway/ground ops',        color: '#29b6f6', mode: 'am' },
+  { group: 'Boston ATC', freq: '135.000', label: 'Logan Clearance',     sub: 'IFR clearance delivery',    color: '#29b6f6', mode: 'am' },
+  { group: 'Boston ATC', freq: '121.500', label: 'Guard / Emergency',   sub: 'International emergency',   color: '#ff5252', mode: 'am' },
   // ── Ham Radio (FM) ──
-  { freq: '146.520', label: '2m Calling',          sub: 'National simplex calling',  color: '#66bb6a', mode: 'fm' },
-  { freq: '146.685', label: 'W1MRA Repeater',      sub: 'VHF FM Repeater (-600 PL67)',color: '#66bb6a', mode: 'fm' },
-  { freq: '147.150', label: 'K1RX Repeater',       sub: 'Eastern MA (+600)',         color: '#66bb6a', mode: 'fm' },
-  { freq: '146.955', label: 'WA1YQK Repeater',     sub: 'MA 2m (-600)',              color: '#66bb6a', mode: 'fm' },
-  { freq: '449.275', label: '70cm Repeater',        sub: 'UHF FM Repeater',           color: '#aed581', mode: 'fm' },
+  { group: 'Ham Radio', freq: '146.520', label: '2m Calling',          sub: 'National simplex calling',  color: '#66bb6a', mode: 'fm' },
+  { group: 'Ham Radio', freq: '146.685', label: 'W1MRA Repeater',      sub: 'VHF FM Repeater (-600 PL67)',color: '#66bb6a', mode: 'fm' },
+  { group: 'Ham Radio', freq: '147.150', label: 'K1RX Repeater',       sub: 'Eastern MA (+600)',         color: '#66bb6a', mode: 'fm' },
+  { group: 'Ham Radio', freq: '146.955', label: 'WA1YQK Repeater',     sub: 'MA 2m (-600)',              color: '#66bb6a', mode: 'fm' },
+  { group: 'Ham Radio', freq: '449.275', label: '70cm Repeater',        sub: 'UHF FM Repeater',           color: '#aed581', mode: 'fm' },
   // ── Fire / EMS (FM) ──
-  { freq: '155.1953', label: 'Fire/EMS Dispatch',  sub: 'Norfolk County',            color: '#ff7043', mode: 'fm' },
-  { freq: '155.3400', label: 'Fire Dispatch',       sub: 'MA mutual aid',             color: '#ff7043', mode: 'fm' },
-  { freq: '155.3100', label: 'EMS / Ambulance',     sub: 'Regional EMS',              color: '#4caf50', mode: 'fm' },
-  // ── Weather / Other ──
-  { freq: '162.400',  label: 'NOAA Weather WX4',   sub: 'NOAA continuous',           color: '#ab47bc', mode: 'fm' },
-  { freq: '162.550',  label: 'NOAA Weather WX1',   sub: 'NOAA backup',               color: '#ab47bc', mode: 'fm' },
+  { group: 'Fire / EMS', freq: '155.1953', label: 'Fire/EMS Dispatch',  sub: 'Norfolk County',            color: '#ff7043', mode: 'fm' },
+  { group: 'Fire / EMS', freq: '155.3400', label: 'Fire Dispatch',       sub: 'MA mutual aid',             color: '#ff7043', mode: 'fm' },
+  { group: 'Fire / EMS', freq: '155.3100', label: 'EMS / Ambulance',     sub: 'Regional EMS',              color: '#4caf50', mode: 'fm' },
+  // ── Weather ──
+  { group: 'Weather', freq: '162.400',  label: 'NOAA Weather WX4',   sub: 'NOAA continuous',           color: '#ab47bc', mode: 'fm' },
+  { group: 'Weather', freq: '162.550',  label: 'NOAA Weather WX1',   sub: 'NOAA backup',               color: '#ab47bc', mode: 'fm' },
+  { group: 'Weather', freq: '162.475',  label: 'NOAA Weather WX3',   sub: 'Strong hit in Jul-26 sweep',color: '#ab47bc', mode: 'fm' },
+  // ── Sweep Finds (Jul 2026 full-band scan) ──
+  { group: 'Sweep Finds Jul-26', freq: '453.820',  label: 'Public Safety UHF',  sub: 'Likely police/fire dispatch',color: '#f06292', mode: 'fm' },
+  { group: 'Sweep Finds Jul-26', freq: '462.975',  label: 'GMRS / Business UHF',sub: 'Walkie-talkies / repeater', color: '#f06292', mode: 'fm' },
+  { group: 'Sweep Finds Jul-26', freq: '27.165',   label: 'CB Channel 17',       sub: 'Truckers — AM chatter',     color: '#f06292', mode: 'am' },
+  { group: 'Sweep Finds Jul-26', freq: '119.950',  label: 'Airband ATC',         sub: 'Sweep hit near 119.94',     color: '#f06292', mode: 'am' },
+  { group: 'Sweep Finds Jul-26', freq: '110.700',  label: 'VOR Beacon',          sub: 'Nav beacon — Morse ID',     color: '#f06292', mode: 'am' },
+  { group: 'Sweep Finds Jul-26', freq: '115.200',  label: 'VOR Beacon',          sub: 'Nav beacon — Morse ID',     color: '#f06292', mode: 'am' },
+  { group: 'Sweep Finds Jul-26', freq: '937.611',  label: '900 MHz Paging',      sub: 'Pager bursts (data)',       color: '#f06292', mode: 'fm' },
+  { group: 'Sweep Finds Jul-26', freq: '840.010',  label: '800 MHz Public Safety',sub: 'Possibly trunked control', color: '#f06292', mode: 'fm' },
+  { group: 'Sweep Finds Jul-26', freq: '1295.820', label: '23cm Mystery',        sub: 'Ham 23cm band or radar',    color: '#f06292', mode: 'fm' },
 ];
 
 let msgCount   = 0;
@@ -341,6 +563,32 @@ let planesMap      = null;
 let planesMarkers  = {};
 let planesInterval = null;
 
+function flightAwareUrl(callsign) {
+  if (!callsign) return null;
+  const cs = callsign.trim().toUpperCase();
+  const prefix = cs.substring(0, 3);
+  const num = cs.substring(3);
+  const al = ICAO_AIRLINES[prefix];
+  const iata = al ? al.iata : null;
+  return `https://flightaware.com/live/flight/${encodeURIComponent(iata ? iata + num : cs)}`;
+}
+
+function flightLinks(callsign) {
+  if (!callsign) return '';
+  const cs = callsign.trim().toUpperCase();
+  const faUrl = flightAwareUrl(cs);
+  const fr24Url = `https://www.flightradar24.com/${encodeURIComponent(cs)}`;
+  const btnStyle = 'display:inline-block;padding:2px 8px;border-radius:3px;font-size:0.78em;text-decoration:none;font-family:"Courier New",monospace;background:#1e3a5f;color:#4fc3f7;border:1px solid #2a5080;margin-right:4px;';
+  return `<div style="margin-top:5px;">`
+    + `<a href="${faUrl}" target="_blank" rel="noopener" style="${btnStyle}">🔗 FlightAware</a>`
+    + `<a href="${fr24Url}" target="_blank" rel="noopener" style="${btnStyle}">🗺️ FlightRadar24</a>`
+    + `</div>`;
+}
+
+function buildPopupHtml(titleLine, alt, spd, hdg, dist, siteName, hex, tail, sqwk, callsign) {
+  return `<div style="min-width:200px;line-height:1.7;">${titleLine}<b>Alt:</b> ${alt} · <b>Spd:</b> ${spd} · <b>Hdg:</b> ${hdg}°<br><b>Distance:</b> ${dist} NM · <span style="color:#888">${escHtml(hex||'')}</span>${tail ? '<br><b>Tail:</b> ' + escHtml(tail) : ''}${sqwk ? '<br><b>Squawk:</b> ' + sqwk : ''}${flightLinks(callsign)}</div>`;
+}
+
 let shipsMap      = null;
 let shipMarkers   = {};
 let shipsInterval = null;
@@ -352,14 +600,92 @@ function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// ── ICAO airline prefix → name + IATA code ──
+const ICAO_AIRLINES = {
+  AAL: { name: 'American Airlines',    iata: 'AA' },
+  UAL: { name: 'United Airlines',      iata: 'UA' },
+  DAL: { name: 'Delta Air Lines',      iata: 'DL' },
+  JBU: { name: 'JetBlue Airways',      iata: 'B6' },
+  SWA: { name: 'Southwest Airlines',   iata: 'WN' },
+  BAW: { name: 'British Airways',      iata: 'BA' },
+  AFR: { name: 'Air France',           iata: 'AF' },
+  DLH: { name: 'Lufthansa',            iata: 'LH' },
+  WJA: { name: 'WestJet',              iata: 'WS' },
+  ACA: { name: 'Air Canada',           iata: 'AC' },
+  FFT: { name: 'Frontier Airlines',    iata: 'F9' },
+  SKW: { name: 'SkyWest Airlines',     iata: 'OO' },
+  RPA: { name: 'Republic Airways',     iata: 'YX' },
+  ASA: { name: 'Alaska Airlines',      iata: 'AS' },
+  NKS: { name: 'Spirit Airlines',      iata: 'NK' },
+  EIN: { name: 'Aer Lingus',           iata: 'EI' },
+  UAE: { name: 'Emirates',             iata: 'EK' },
+  QTR: { name: 'Qatar Airways',        iata: 'QR' },
+  VIR: { name: 'Virgin Atlantic',      iata: 'VS' },
+  FDX: { name: 'FedEx',                iata: 'FX' },
+  UPS: { name: 'UPS Airlines',         iata: '5X' },
+  CPA: { name: 'Cathay Pacific',       iata: 'CX' },
+  KAL: { name: 'Korean Air',           iata: 'KE' },
+  ANA: { name: 'All Nippon Airways',   iata: 'NH' },
+  JAL: { name: 'Japan Airlines',       iata: 'JL' },
+  THY: { name: 'Turkish Airlines',     iata: 'TK' },
+  IBE: { name: 'Iberia',               iata: 'IB' },
+  KLM: { name: 'KLM',                  iata: 'KL' },
+  SWR: { name: 'Swiss Intl Air Lines', iata: 'LX' },
+  AUA: { name: 'Austrian Airlines',    iata: 'OS' },
+  HAL: { name: 'Hawaiian Airlines',    iata: 'HA' },
+  JIA: { name: 'Envoy Air',            iata: 'MQ' },
+  PDT: { name: 'Piedmont Airlines',    iata: 'PT' },
+  PSA: { name: 'PSA Airlines',         iata: 'OH' },
+  AWI: { name: 'Air Wisconsin',        iata: 'ZW' },
+  GTI: { name: 'Atlas Air',            iata: '5Y' },
+  ABX: { name: 'ABX Air',              iata: 'GB' },
+  POE: { name: 'Porter Airlines',      iata: 'PD' },
+  TSC: { name: 'Air Transat',          iata: 'TS' },
+  EZY: { name: 'easyJet',              iata: 'U2' },
+  RYR: { name: 'Ryanair',              iata: 'FR' },
+  NAX: { name: 'Norwegian Air',        iata: 'DY' },
+  AMX: { name: 'Aeromexico',           iata: 'AM' },
+  CMP: { name: 'Copa Airlines',        iata: 'CM' },
+  AVA: { name: 'Avianca',              iata: 'AV' },
+  TAM: { name: 'LATAM Brasil',         iata: 'JJ' },
+  LAN: { name: 'LATAM Airlines',       iata: 'LA' },
+  CJT: { name: 'Cargojet',             iata: 'W8' },
+  WZZ: { name: 'Wizz Air',             iata: 'W6' },
+  VOI: { name: 'Volaris',              iata: 'Y4' },
+  SAS: { name: 'Scandinavian Airlines',iata: 'SK' },
+};
+
+function decodeAirline(flight) {
+  if (!flight) return { name: '', iata: '', num: '', short: '' };
+  const f = flight.trim();
+  if (!f) return { name: '', iata: '', num: '', short: '' };
+  const prefix = f.substring(0, 3).toUpperCase();
+  const num = f.substring(3).trim();
+  const al = ICAO_AIRLINES[prefix];
+  if (al) {
+    return { name: al.name, iata: al.iata || prefix, num, short: (al.iata || prefix) + num };
+  }
+  return { name: '', iata: prefix, num, short: f };
+}
+
+function haversineNm(lat1, lon1, lat2, lon2) {
+  const R = 3440.065; // Earth radius in NM
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
 // ── Planes Leaflet map ──
-function planeIcon(hdg) {
+function planeIcon(hdg, label) {
+  const labelHtml = label
+    ? `<div style="font-size:9px;color:#4fc3f7;text-align:center;white-space:nowrap;font-family:'Courier New',monospace;text-shadow:0 0 3px #000,0 0 3px #000;margin-top:1px;line-height:1;">${label}</div>`
+    : '';
   return L.divIcon({
-    html: `<div style="transform:rotate(${hdg||0}deg);font-size:20px;line-height:1;
-                       text-shadow:0 0 3px #000,0 0 3px #000;">✈️</div>`,
+    html: `<div style="text-align:center;"><div style="transform:rotate(${hdg||0}deg);font-size:20px;line-height:1;text-shadow:0 0 3px #000,0 0 3px #000;">✈️</div>${labelHtml}</div>`,
     className: '',
-    iconSize:   [24, 24],
-    iconAnchor: [12, 12],
+    iconSize:   [44, 32],
+    iconAnchor: [22, 10],
     popupAnchor:[0, -14]
   });
 }
@@ -380,36 +706,63 @@ function refreshPlanes() {
   fetch('/api/aircraft')
     .then(r => r.json())
     .then(data => {
-      const ac   = data.aircraft || [];
+      const ac  = data.aircraft || [];
       const seen = new Set();
+      const cLat = siteConfig.lat !== 0 ? siteConfig.lat : 42.1;
+      const cLon = siteConfig.lon !== 0 ? siteConfig.lon : -71.2;
+      const rows = [];
+
       ac.forEach(a => {
         if (a.lat == null || a.lon == null) return;
-        const key    = a.hex;
-        const label  = (a.flight || a.hex || '').trim();
-        const alt    = a.altitude != null ? a.altitude + ' ft' : '—';
-        const spd    = a.speed    != null ? a.speed    + ' kt' : '—';
-        const hdg    = a.track    || 0;
-        const sqwk   = a.squawk   || '';
-        const popup  = `<b>${escHtml(label)}</b><br>Alt: ${alt}<br>Speed: ${spd}<br>Hdg: ${hdg}°${sqwk ? '<br>Squawk: ' + sqwk : ''}`;
+        const key  = a.hex;
+        const raw  = (a.flight || '').trim();
+        const al   = decodeAirline(raw);
+        const label = al.short || raw || '';
+        const alt  = a.altitude != null ? a.altitude + ' ft' : '—';
+        const spd  = a.speed    != null ? a.speed    + ' kt' : '—';
+        const hdg  = a.track    || 0;
+        const sqwk = a.squawk   || '';
+        const tail = a.registration || a.tail || '';
+        const dist = haversineNm(cLat, cLon, a.lat, a.lon);
+
+        const callsign = raw || a.hex || '';
+        const titleLine = al.name
+          ? `<div style="font-size:1.05em;font-weight:bold;color:#ffd740;margin-bottom:4px;">${escHtml(al.name)} ${escHtml(al.iata)}${escHtml(al.num)}</div>`
+          : `<div style="font-size:1.05em;font-weight:bold;color:#ffd740;margin-bottom:4px;">${escHtml(label || 'Flight Unknown')}</div>`;
+        const popup = buildPopupHtml(titleLine, alt, spd, hdg, dist.toFixed(1), siteConfig.name||'home', a.hex, tail, sqwk, callsign);
+
         seen.add(key);
         if (planesMarkers[key]) {
           planesMarkers[key].setLatLng([a.lat, a.lon]);
-          planesMarkers[key].setIcon(planeIcon(hdg));
+          planesMarkers[key].setIcon(planeIcon(hdg, label));
           planesMarkers[key].getPopup().setContent(popup);
         } else {
-          planesMarkers[key] = L.marker([a.lat, a.lon], { icon: planeIcon(hdg) })
+          planesMarkers[key] = L.marker([a.lat, a.lon], { icon: planeIcon(hdg, label) })
                                  .bindPopup(popup)
                                  .addTo(planesMap);
         }
+        rows.push({ key, label, airlineName: al.name, alt: a.altitude, spd: a.speed, dist });
       });
+
       Object.keys(planesMarkers).forEach(k => {
         if (!seen.has(k)) {
           planesMap.removeLayer(planesMarkers[k]);
           delete planesMarkers[k];
         }
       });
+
+      const countEl = document.getElementById('plane-count');
+      if (countEl) countEl.textContent = rows.length + ' aircraft';
     })
     .catch(() => {});
+}
+
+function focusPlane(hex) {
+  const m = planesMarkers[hex];
+  if (m && planesMap) {
+    planesMap.setView(m.getLatLng(), Math.max(planesMap.getZoom(), 10));
+    m.openPopup();
+  }
 }
 
 // ── Ships Leaflet map ──
@@ -669,30 +1022,64 @@ function startPagerStream() {
 }
 
 // ── Scanner ──
-function buildFreqList() {
+const collapsedGroups = {};
+
+function renderFreqList(filter = '') {
   const list = document.getElementById('freq-list');
-  FREQUENCIES.forEach(f => {
-    const btn = document.createElement('div');
-    btn.className = 'freq-btn';
-    btn.dataset.freq = f.freq;
-    btn.style.cssText = `cursor:pointer;padding:10px 12px;border:1px solid #1a2840;
-      border-left:3px solid ${f.color};border-radius:4px;margin-bottom:6px;transition:all 0.2s;`;
-    const modeBadge = `<span style="font-size:0.65rem;background:#1a2840;padding:1px 5px;border-radius:3px;color:${f.mode==='am'?'#ffd740':'#66bb6a'}">${(f.mode||'fm').toUpperCase()}</span>`;
-    btn.innerHTML = `
-      <div style="color:#c0d8f0;font-size:0.85rem;font-weight:bold;display:flex;justify-content:space-between">${f.freq} MHz ${modeBadge}</div>
-      <div style="color:#7090b0;font-size:0.75rem;">${f.label}</div>
-      <div style="color:#4a6060;font-size:0.7rem;">${f.sub}</div>`;
-    btn.addEventListener('click', () => tuneScanner(f));
-    btn.addEventListener('mouseenter', () => btn.style.borderColor = f.color);
-    btn.addEventListener('mouseleave', () => { if (btn.dataset.freq !== currentScanFreq) btn.style.borderColor = '#1a2840'; });
-    list.appendChild(btn);
+  list.innerHTML = '';
+  const q = filter.trim().toLowerCase();
+  const groups = [...new Set(FREQUENCIES.map(f => f.group))];
+  groups.forEach(g => {
+    const items = FREQUENCIES.filter(f => f.group === g &&
+      (!q || g.toLowerCase().includes(q) || f.freq.includes(q) || f.label.toLowerCase().includes(q) || f.sub.toLowerCase().includes(q)));
+    if (!items.length) return;
+    const collapsed = collapsedGroups[g] && !q;
+    const hdr = document.createElement('div');
+    hdr.className = 'freq-group-hdr';
+    hdr.innerHTML = `<span class="dot" style="background:${items[0].color}"></span>${g}<span class="cnt">${collapsed ? '▸' : items.length}</span>`;
+    hdr.addEventListener('click', () => {
+      collapsedGroups[g] = !collapsedGroups[g];
+      renderFreqList(document.getElementById('freq-search').value);
+    });
+    list.appendChild(hdr);
+    if (collapsed) return;
+    items.forEach(f => {
+      const btn = document.createElement('div');
+      btn.className = 'freq-btn' + (f.freq === currentScanFreq ? ' tuned' : '');
+      btn.dataset.freq = f.freq;
+      btn.style.borderLeft = `3px solid ${f.color}`;
+      const modeBadge = `<span style="font-size:0.65rem;background:#1a2840;padding:1px 5px;border-radius:3px;color:${f.mode==='am'?'#ffd740':'#66bb6a'}">${(f.mode||'fm').toUpperCase()}</span>`;
+      btn.innerHTML = `
+        <div style="color:#c0d8f0;font-size:0.85rem;font-weight:bold;display:flex;justify-content:space-between">${f.freq} MHz ${modeBadge}</div>
+        <div style="color:#7090b0;font-size:0.75rem;">${f.label}</div>
+        <div style="color:#4a6060;font-size:0.7rem;">${f.sub}</div>`;
+      btn.addEventListener('click', () => tuneScanner(f));
+      list.appendChild(btn);
+    });
   });
 }
 
+function buildFreqList() {
+  const s = document.getElementById('freq-search');
+  renderFreqList(s ? s.value : '');
+}
+
+function tuneCustom() {
+  const v = parseFloat(document.getElementById('custom-freq').value);
+  if (!v || v < 24 || v > 1766) {
+    document.getElementById('now-playing').textContent = 'Enter 24–1766 MHz';
+    return;
+  }
+  const mode = document.getElementById('custom-mode').value;
+  tuneScanner({ freq: v.toFixed(3), label: 'Custom tune', sub: `${mode.toUpperCase()} — manual entry`, mode, color: '#4fc3f7' });
+}
+
 function tuneScanner(f) {
-  document.querySelectorAll('.freq-btn').forEach(b => b.style.background = 'transparent');
+  document.querySelectorAll('.freq-btn').forEach(b => b.classList.remove('tuned'));
   const sel = document.querySelector(`.freq-btn[data-freq="${f.freq}"]`);
-  if (sel) sel.style.background = '#0d1a2a';
+  if (sel) sel.classList.add('tuned');
+  document.getElementById('scanner-freq-big').textContent = f.freq;
+  document.getElementById('np-card').classList.remove('playing');
   currentScanFreq = f.freq;
   document.getElementById('scanner-freq-display').textContent = f.freq + ' MHz';
   document.getElementById('now-playing').textContent      = '⏳ Tuning to ' + f.freq + ' MHz…';
@@ -717,6 +1104,27 @@ function tuneScanner(f) {
     }
   }, 800); // small delay so server can kill old process first
 }
+
+// ── EQ animation follows audio state ──
+(() => {
+  const audio = document.getElementById('scanner-audio');
+  const card  = document.getElementById('np-card');
+  audio.addEventListener('playing', () => card.classList.add('playing'));
+  ['pause','ended','emptied','error'].forEach(ev =>
+    audio.addEventListener(ev, () => card.classList.remove('playing')));
+})();
+
+// ── Header clock ──
+function updateClock() {
+  const el = document.getElementById('hdr-clock');
+  if (!el) return;
+  const now = new Date();
+  const loc = now.toLocaleTimeString('en-US', { hour12: false });
+  const utc = now.toISOString().substring(11, 19);
+  el.innerHTML = `<b>${loc}</b> local · ${utc}Z`;
+}
+updateClock();
+setInterval(updateClock, 1000);
 
 // ── APRS ──
 let aprsSource  = null;
@@ -926,13 +1334,171 @@ function startVlf() {
   vlfInterval = setInterval(refreshVlf, 20000);
 }
 
+// ── Meters ──
+let metersInterval = null;
+let metersMaxRate = {};
+
+function relTime(ts) {
+  if (!ts) return '—';
+  const ago = Math.floor(Date.now() / 1000 - ts);
+  if (ago < 10)  return 'just now';
+  if (ago < 60)  return ago + 's ago';
+  if (ago < 3600) return Math.floor(ago / 60) + ' min ago';
+  if (ago < 86400) return Math.floor(ago / 3600) + ' hr ago';
+  return Math.floor(ago / 86400) + 'd ago';
+}
+
+function liveClass(ts) {
+  if (!ts) return 'stale';
+  const ago = Date.now() / 1000 - ts;
+  if (ago < 60)  return 'live';
+  if (ago < 300) return 'recent';
+  return 'stale';
+}
+
+function refreshMeters() {
+  fetch('/api/meters')
+    .then(r => r.json())
+    .then(meters => {
+      const grid = document.getElementById('meters-grid');
+      const empty = document.getElementById('meters-empty');
+      if (!meters.length) return;
+      if (empty) empty.remove();
+
+      document.getElementById('meters-count').textContent = meters.length + ' meter' + (meters.length !== 1 ? 's' : '');
+
+      meters.forEach(m => {
+        const domId = 'meter_' + m.id;
+        let card = document.getElementById(domId);
+        if (!card) {
+          card = document.createElement('div');
+          card.id = domId;
+          card.className = 'meter-card' + (m.id === '60321122' ? ' my-house' : '');
+          grid.appendChild(card);
+        }
+
+        const isGas  = m.type === 'gas';
+        const emoji  = isGas ? '⛽' : '⚡';
+        const unit   = isGas ? 'CCF/hr' : 'kWh/hr';
+        const rate   = m.rate_per_hour || 0;
+        const maxR   = Math.max(metersMaxRate[m.id] || 0, rate);
+        metersMaxRate[m.id] = maxR;
+        const barPct = maxR > 0 ? Math.min(100, (rate / maxR) * 100) : 0;
+        const dot    = liveClass(m.last_seen);
+        const count  = m.reading_count || 0;
+
+        card.innerHTML = `
+          <div class="meter-label" style="display:flex;align-items:center;gap:4px;">
+            ${escHtml(m.label)} ${emoji}<span class="meter-live-dot ${dot}"></span>
+          </div>
+          <div class="meter-consumption">${m.consumption != null ? Number(m.consumption).toLocaleString() : '—'}</div>
+          <div class="meter-rate">${rate > 0 ? rate.toFixed(2) + ' ' + unit : 'Calculating rate...'}</div>
+          <div class="meter-ts">Last seen: ${relTime(m.last_seen)} &nbsp;·&nbsp; ID ${escHtml(m.id)}</div>
+          <div class="meter-count">${count} reading${count !== 1 ? 's' : ''} received</div>
+          <div class="meter-bar-bg"><div class="meter-bar" style="width:${barPct.toFixed(1)}%"></div></div>`;
+      });
+    })
+    .catch(() => {});
+}
+
+function startMeters() {
+  if (metersInterval) clearInterval(metersInterval);
+  refreshMeters();
+  metersInterval = setInterval(refreshMeters, 5000);
+}
+
+// ── Waterfall Display ──
+let waterfallCanvas = null;
+let waterfallCtx = null;
+let waterfallInterval = null;
+let waterfallFreq = '433.92';
+
+function initWaterfall() {
+  waterfallCanvas = document.getElementById('waterfall-canvas');
+  if (!waterfallCanvas) return;
+  waterfallCtx = waterfallCanvas.getContext('2d');
+  // Set canvas size
+  const rect = waterfallCanvas.getBoundingClientRect();
+  waterfallCanvas.width = 512;
+  waterfallCanvas.height = rect.height || 300;
+  // Clear to black
+  waterfallCtx.fillStyle = '#000';
+  waterfallCtx.fillRect(0, 0, waterfallCanvas.width, waterfallCanvas.height);
+}
+
+function setWaterfallFreq(val) {
+  const customInput = document.getElementById('waterfall-custom');
+  if (val === 'custom') {
+    customInput.style.display = 'inline';
+    return;
+  }
+  customInput.style.display = 'none';
+  waterfallFreq = val;
+  document.getElementById('waterfall-status').textContent = `TUNED: ${val} MHz`;
+}
+
+async function startWaterfall() {
+  initWaterfall();
+  const freq = waterfallFreq;
+  document.getElementById('waterfall-status').textContent = `STREAMING ${freq} MHz`;
+  
+  // First set mode to scanner to free device
+  await fetch('/api/mode/scanner', { method: 'POST' });
+  await new Promise(r => setTimeout(r, 500));
+  
+  // Start fetching FFT data
+  try {
+    const response = await fetch(`/waterfall-stream?freq=${freq}`);
+    const reader = response.body.getReader();
+    let lineNum = 0;
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      // Each chunk is 512 bytes = one scanline
+      if (waterfallCanvas && waterfallCtx) {
+        const height = waterfallCanvas.height;
+        // Scroll down by one pixel
+        const imageData = waterfallCtx.getImageData(0, 0, 512, height - 1);
+        waterfallCtx.putImageData(imageData, 0, 1);
+        
+        // Draw new line at top
+        const imgData = waterfallCtx.createImageData(512, 1);
+        let maxVal = 0, maxIdx = 0;
+        for (let i = 0; i < 512; i++) {
+          const gray = value[i] || 0;
+          imgData.data[i * 4] = gray;     // R
+          imgData.data[i * 4 + 1] = gray; // G
+          imgData.data[i * 4 + 2] = gray; // B
+          imgData.data[i * 4 + 3] = 255;  // A
+          if (gray > maxVal) { maxVal = gray; maxIdx = i; }
+        }
+        waterfallCtx.putImageData(imgData, 0, 0);
+        
+        // Update peak display
+        const peakFreq = (parseFloat(freq) + (maxIdx - 256) * 2.4 / 512).toFixed(3);
+        document.getElementById('waterfall-peak').textContent = `${peakFreq} MHz (${maxVal})`;
+      }
+    }
+  } catch (e) {
+    document.getElementById('waterfall-status').textContent = 'ERROR: ' + e.message;
+  }
+}
+
+function stopWaterfall() {
+  document.getElementById('waterfall-status').textContent = 'STOPPED';
+  fetch('/api/mode/scanner', { method: 'POST' });
+}
+
 // ── Mode switching ──
 function stopAllStreams() {
   if (pagerSource)   { pagerSource.close();   pagerSource   = null; }
   if (acarsSource)   { acarsSource.close();   acarsSource   = null; }
   if (sensorsSource) { sensorsSource.close(); sensorsSource = null; }
   if (aprsSource)    { aprsSource.close();    aprsSource    = null; }
-  if (vlfInterval)   { clearInterval(vlfInterval);    vlfInterval   = null; }
+  if (vlfInterval)    { clearInterval(vlfInterval);    vlfInterval    = null; }
+  if (metersInterval) { clearInterval(metersInterval); metersInterval = null; }
   if (planesInterval) { clearInterval(planesInterval); planesInterval = null; }
   if (shipsInterval)  { clearInterval(shipsInterval);  shipsInterval  = null; }
 }
@@ -956,6 +1522,10 @@ function activateMode(mode) {
     startAprsStream();
   } else if (mode === 'vlf') {
     startVlf();
+  } else if (mode === 'meters') {
+    startMeters();
+  } else if (mode === 'waterfall') {
+    initWaterfall();
   }
   // scanner: audio is on-demand
 }
