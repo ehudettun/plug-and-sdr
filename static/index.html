@@ -272,6 +272,22 @@
     #scanner-sidebar { width: 240px; }
     .np-card { min-width: 0; padding: 18px; }
   }
+  @media (max-width: 700px) {
+    header { flex-wrap: wrap; row-gap: 6px; }
+    header h1 { font-size: 0.85rem; letter-spacing: 2px; }
+    #sdr-status-bar span { display: none; }
+    nav { flex-basis: 100%; margin-left: 0; justify-content: flex-start; }
+    .tab-btn { padding: 6px 10px; font-size: 0.75rem; flex-shrink: 0; }
+    .panel-split { flex-direction: column; }
+    .panel-split > div:first-child {
+      width: 100% !important; max-height: 42vh;
+      border-right: none !important; border-bottom: 1px solid var(--line);
+    }
+    #scanner-sidebar { width: 100%; }
+    .np-card { width: 100%; padding: 16px; }
+    .np-freq { font-size: 1.5rem; }
+    #scanner-audio { width: 100% !important; }
+  }
 </style>
 </head>
 <body>
@@ -349,7 +365,7 @@
     <span class="pager-freq" id="scanner-freq-display">—</span>
     <span id="scanner-status" style="margin-left:auto; color:#4caf50;">▶ LIVE</span>
   </div>
-  <div style="display:flex; flex:1; overflow:hidden; min-height:0;">
+  <div class="panel-split" style="display:flex; flex:1; overflow:hidden; min-height:0;">
     <div id="scanner-sidebar">
       <input id="freq-search" type="text" placeholder="🔎 Filter — name or MHz"
              oninput="renderFreqList(this.value)" autocomplete="off">
@@ -422,7 +438,7 @@
     <span class="pager-freq" id="aprs-freq-label">Amateur Radio Packet</span>
     <span id="aprs-count" class="pager-count">0 stations</span>
   </div>
-  <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+  <div class="panel-split" style="display:flex;flex:1;overflow:hidden;min-height:0;">
     <div style="width:280px;border-right:1px solid #1e3a5f;overflow-y:auto;padding:10px;flex-shrink:0;">
       <div style="font-size:0.7rem;color:#4a6080;letter-spacing:1px;margin-bottom:8px;">HEARD STATIONS</div>
       <div id="aprs-list"></div>
